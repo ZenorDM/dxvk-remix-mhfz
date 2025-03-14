@@ -51,6 +51,11 @@ namespace dxvk {
   const Direct3DState9& D3D9Rtx::d3d9State() const {
     return *m_parent->GetRawState();
   }
+  // MHFZ start: non constant state getter impl
+  Direct3DState9& D3D9Rtx::d3d9State(){
+    return *m_parent->GetRawState();
+  }
+  // MHFZ start
 
   template<typename T>
   void D3D9Rtx::copyIndices(const uint32_t indexCount, T*& pIndicesDst, T* pIndices, uint32_t& minIndex, uint32_t& maxIndex) {
@@ -152,6 +157,26 @@ namespace dxvk {
 
     // Get common shaders to query what data we can capture
     const D3D9CommonShader* vertexShader = d3d9State().vertexShader.ptr() != nullptr ? d3d9State().vertexShader->GetCommonShader() : nullptr;
+    // MHFZ start: to help with float precision issue fake world matrix to reduce local position captured value, world transform will be reinject with D3D9SpecConstantId::CustomVertexTransformEnabled
+    Matrix4 ObjectToProjection;
+    Matrix4 WorldToProj;
+    if (d3d9State().pixelShader.ptr() != nullptr) {
+      Matrix4 world;
+      memcpy(world.data, d3d9State().vsConsts.fConsts[195].data, 4 * 4 * sizeof(float));
+
+      // clear world matrix
+      Matrix4 matrix;
+      memcpy(d3d9State().vsConsts.fConsts[38].data, matrix.data, 4 * 4 * sizeof(float));
+      memcpy(d3d9State().vsConsts.fConsts[42].data, matrix.data, 4 * 4 * sizeof(float));
+      memcpy(d3d9State().vsConsts.fConsts[195].data, matrix.data, 4 * 4 * sizeof(float));
+     
+      m_activeDrawCallState.transformData.objectToWorld = transpose(world);
+
+      WorldToProj = m_activeDrawCallState.transformData.viewToProjection * m_activeDrawCallState.transformData.worldToView * m_activeDrawCallState.transformData.objectToWorld;
+    } else {
+      ObjectToProjection = m_activeDrawCallState.transformData.viewToProjection * m_activeDrawCallState.transformData.worldToView * m_activeDrawCallState.transformData.objectToWorld;
+    }
+    // MHFZ end
 
     RasterGeometry& geoData = m_activeDrawCallState.geometryData;
 
@@ -183,12 +208,13 @@ namespace dxvk {
 
     auto constants = m_vsVertexCaptureData->allocSlice();
 
-    // NOTE: May be better to move reverse transformation to end of frame, because this won't work if there hasnt been a FF draw this frame to scrape the matrix from...
-    const Matrix4& ObjectToProjection = m_activeDrawCallState.transformData.viewToProjection * m_activeDrawCallState.transformData.worldToView * m_activeDrawCallState.transformData.objectToWorld;
-
     // Set constants required for vertex shader injection
     D3D9RtxVertexCaptureData& data = *(D3D9RtxVertexCaptureData*) constants.mapPtr;
     // Apply an inverse transform to get positions in object space (what renderer expects)
+
+    // MHFZ start: save for reinject worl matrix
+    data.customWorldToProjection = WorldToProj;
+    // MHFZ end:
     data.projectionToWorld = inverse(ObjectToProjection);
     data.normalTransform = m_activeDrawCallState.transformData.objectToWorld;
     data.baseVertex = (uint32_t)std::max(0, vertexIndexOffset);
@@ -196,6 +222,11 @@ namespace dxvk {
     m_parent->EmitCs([cVertexDataSlice = slice,
                       cConstantBuffer = m_vsVertexCaptureData,
                       cConstants = constants](DxvkContext* ctx) {
+
+      // MHFZ start: enable CustomVertexTransformEnabled
+      ctx->setSpecConstant(VK_PIPELINE_BIND_POINT_GRAPHICS, /*/D3D9SpecConstantId::CustomVertexTransformEnabled*/11, true);
+      // MHFZ end:
+      // 
       // Bind the new constants to buffer
       ctx->invalidateBuffer(cConstantBuffer, cConstants);
 
