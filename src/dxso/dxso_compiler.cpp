@@ -3671,13 +3671,14 @@ void DxsoCompiler::emitControlFlowGenericLoop(
           m_ps.specularColorIn = inputPtr.id;
       }
 
+      // MHFZ start: capture tangent
+      if (m_programInfo.type() == DxsoProgramType::VertexShader && elem.semantic.usage == DxsoUsage::Tangent) {
+        m_vs.oTangent0 = inputPtr;
+      }
+      // MHFZ end
+
       m_module.opStore(indexPtr.id, workingReg.id);
 
-      // NV-DXVK start: vertex shader data capture implementation
-      if (m_programInfo.type() == DxsoProgramType::VertexShader && elem.semantic.usage == DxsoUsage::Normal && elem.semantic.usageIndex == 0) {
-        m_vs.oNormal0 = indexPtr;
-      }
-      // NV-DXVK end
     }
   }
 
@@ -3873,6 +3874,12 @@ void DxsoCompiler::emitControlFlowGenericLoop(
   void DxsoCompiler::emitLinkerOutputSetup() {
     bool outputtedColor0 = false;
     bool outputtedColor1 = false;
+    // MHFZ start: local variables to capture normal depending on shader nature
+    uint32_t texCoordCount = 0;
+    DxsoRegisterPointer oNormal0;//world
+    DxsoRegisterPointer oNormal1;//characters
+    DxsoRegisterPointer oNormal2;//monsters
+    // MHFZ end
 
     for (uint32_t i = 0; i < m_osgn.elemCount; i++) {
       const auto& elem = m_osgn.elems[i];
@@ -3996,8 +4003,30 @@ void DxsoCompiler::emitControlFlowGenericLoop(
         workingReg = emitSaturate(workingReg);
 
       m_module.opStore(outputPtr.id, workingReg.id);
+      // MHFZ start: based on texCoord sementic we can suppose normal to capture
+      if (m_programInfo.type() == DxsoProgramType::VertexShader && elem.semantic.usage == DxsoUsage::Texcoord && texCoordCount == 2) {
+        oNormal0 = indexPtr;
+      }
+      if (m_programInfo.type() == DxsoProgramType::VertexShader && elem.semantic.usage == DxsoUsage::Texcoord && texCoordCount == 6) {
+        oNormal1 = indexPtr;
+      }
+      if (m_programInfo.type() == DxsoProgramType::VertexShader && elem.semantic.usage == DxsoUsage::Texcoord && texCoordCount == 3) {
+        oNormal2 = indexPtr;
+      }
+      if (m_programInfo.type() == DxsoProgramType::VertexShader && elem.semantic.usage == DxsoUsage::Texcoord) {
+        ++texCoordCount;
+      }
+      // MHFZ end
     }
 
+    // MHFZ start: save captured normal
+    if (m_vs.oTangent0.id > 0 && texCoordCount == 9)
+      m_vs.oNormal0 = oNormal2;
+    else if (texCoordCount > 7)
+      m_vs.oNormal0 = oNormal1;
+    else
+      m_vs.oNormal0 = oNormal0;
+    // MHFZ end
     // NV-DXVK start: vertex shader data capture implementation
     this->emitVertexCaptureOp();
     // NV-DXVK end

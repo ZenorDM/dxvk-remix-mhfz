@@ -198,7 +198,9 @@ namespace dxvk {
     }
 
     // Check if we should/can get normals.  We don't see a lot of games sending normals to pixel shader, so we must capture from the IA output (or Vertex input)
-    if (BoundShaderHas(vertexShader, DxsoUsage::Normal, true) && useVertexCapturedNormals()) {
+    // MHFZ start: normal are binded to a textcoord output
+    if (BoundShaderHas(vertexShader, DxsoUsage::Texcoord, false) && useVertexCapturedNormals()) {
+    // MHFZ end
       const uint32_t normalOffset = offsetof(CapturedVertex, normal0);
       geoData.normalBuffer = RasterBuffer(slice, normalOffset, stride, VK_FORMAT_R32G32B32_SFLOAT);
       assert(geoData.normalBuffer.offset() % 4 == 0);
@@ -214,7 +216,7 @@ namespace dxvk {
 
     // MHFZ start: save for reinject worl matrix
     data.customWorldToProjection = WorldToProj;
-    // MHFZ end:
+    // MHFZ end
     data.projectionToWorld = inverse(ObjectToProjection);
     data.normalTransform = m_activeDrawCallState.transformData.objectToWorld;
     data.baseVertex = (uint32_t)std::max(0, vertexIndexOffset);
@@ -225,8 +227,8 @@ namespace dxvk {
 
       // MHFZ start: enable CustomVertexTransformEnabled
       ctx->setSpecConstant(VK_PIPELINE_BIND_POINT_GRAPHICS, /*/D3D9SpecConstantId::CustomVertexTransformEnabled*/11, true);
-      // MHFZ end:
-      // 
+      // MHFZ end
+
       // Bind the new constants to buffer
       ctx->invalidateBuffer(cConstantBuffer, cConstants);
 

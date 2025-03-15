@@ -180,6 +180,9 @@ namespace dxvk {
     DxsoRegisterPointer oTex0;
     DxsoRegisterPointer oNormal0;
     // NV-DXVK end
+    // MHFZ start: tangent captured
+    DxsoRegisterPointer oTangent0;
+    // MHFZ end
   };
 
   /**
