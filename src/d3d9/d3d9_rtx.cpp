@@ -190,7 +190,9 @@ namespace dxvk {
     assert(geoData.positionBuffer.offset() % 4 == 0);
 
     // Did we have a texcoord buffer bound for this draw?  Note, we currently get texcoord from the vertex shader output 
-    if (BoundShaderHas(vertexShader, DxsoUsage::Texcoord, false) && (!geoData.texcoordBuffer.defined() || !RtxGeometryUtils::isTexcoordFormatValid(geoData.texcoordBuffer.vertexFormat()))) {
+    // MHFZ start: Force vertex shader texCoord capture to fix texture pan animation 
+    if (BoundShaderHas(vertexShader, DxsoUsage::Texcoord, false) /* && (!geoData.texcoordBuffer.defined() || !RtxGeometryUtils::isTexcoordFormatValid(geoData.texcoordBuffer.vertexFormat()))*/ ) {
+    // MHFZ end
       // Known offset for vertex capture buffers
       const uint32_t texcoordOffset = offsetof(CapturedVertex, texcoord0);
       geoData.texcoordBuffer = RasterBuffer(slice, texcoordOffset, stride, VK_FORMAT_R32G32_SFLOAT);
