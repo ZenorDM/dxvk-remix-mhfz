@@ -2236,7 +2236,84 @@ namespace dxvk {
       assert(height >= thumbnailSize);
       return height;
     }
+    // MHFZ start: helper to print shader
+    void printBuffer(const std::vector<float>& data, size_t size) {
+      if (data.size() == 0)
+        return;
+      static enum PrintType {
+        u = 0,
+        f = 1,
+        h = 2,
+      } printType = f;
+      static int range[2] = { 0, 500 };
+      ImGui::SliderInt2("Range", range, 0, 8182);
+      const char* items[] = { "uint", "float", "hex" };
+      static const char* current_item = "float";
+
+      if (ImGui::BeginCombo("##combo", current_item)) // The second parameter is the label previewed before opening the combo.
+      {
+        for (int n = 0; n < IM_ARRAYSIZE(items); n++) {
+          bool is_selected = (current_item == items[n]); // You can store your selection however you want, outside or inside your objects
+          if (ImGui::Selectable(items[n], is_selected)) {
+            printType = PrintType(n);
+            current_item = items[n];
+          }
+          if (is_selected)
+            ImGui::SetItemDefaultFocus();   // You may set the initial focus when opening the combo (scrolling + for keyboard navigation support)
+
+        }
+        ImGui::EndCombo();
+
+      }
+
+      auto printData = [&](float data) {
+        switch (printType) {
+        case u:
+          ImGui::Text("%u", data);
+          break;
+        case f:
+          ImGui::Text("%f", data);
+          break;
+        case h:
+          ImGui::Text("%x", data);
+          break;
+        default:
+          break;
+        }
+        };
+
+      if (ImGui::BeginTable("Buffer", 5)) {
+        uint32_t index = range[0];
+        uint32_t endIndex = std::min((uint32_t) (size / sizeof(float)), (uint32_t) range[1]);
+        for (uint32_t curFloat = range[0]; curFloat < endIndex; curFloat += 4) {
+          ImGui::TableNextColumn();
+          ImGui::Text("Id : %u ", index++);
+          ImGui::TableNextColumn();
+          printData(data[curFloat]);
+          ImGui::TableNextColumn();
+          if (curFloat + 1 < endIndex) {
+            printData(data[curFloat + 1]);
+            ImGui::TableNextColumn();
+            if (curFloat + 2 < endIndex) {
+              printData(data[curFloat + 2]);
+              ImGui::TableNextColumn();
+              if (curFloat + 3 < endIndex) {
+                printData(data[curFloat + 3]);
+
+              }
+
+            }
+
+          }
+
+        }
+        ImGui::EndTable();
+
+      }
+
+    }
   }
+  // MHFZ end
 
   void ImGUI::showSetupWindow(const Rc<DxvkContext>& ctx) {
     static auto spacing = []() {
@@ -2518,6 +2595,145 @@ namespace dxvk {
       ImGui::EndTabItem();
     }
 
+    // MHFZ start: Add tab to specific mhfz options
+    if (ImGui::BeginTabItem("Step 3: MHFZ specific options", nullptr, tab_item_flags)) {
+      ImGui::Indent();
+
+      if (ImGui::Button("Save")) {
+        DxvkDevice* device = ctx->getCommonObjects()->getSceneManager().device();
+        ShadersHasher& shaderHasher = device->getShaderHasher();
+        shaderHasher.saveProfil();
+      }
+
+      if (ImGui::TreeNode("Shaders")) {
+        DxvkDevice* device = ctx->getCommonObjects()->getSceneManager().device();
+
+        ShadersHasher& shaderHasher = device->getShaderHasher();
+
+        static uint32_t selectedItem = 0;
+        static const char* items[] = { "None", "Highlight", "Only binded" };
+        std::string selected = "";
+        uint32_t varID = 0;
+        for (const char* item : items) {
+          if (selectedItem == varID) {
+            selected += items[varID];
+            selected += " ";
+          }
+          ++varID;
+        }
+        if (ImGui::BeginCombo("Print Binded Shaders", selected.c_str())) {
+          varID = 0;
+          for (const char* item : items) {
+            bool selected = selectedItem == varID;
+            if (ImGui::Selectable(item, &selected)) {
+              if (selected)
+                selectedItem = varID;
+            }
+            ++varID;
+          }
+          ImGui::EndCombo();
+        }
+        static char filter[256];
+        int filter_size = sizeof(filter);
+        ImGui::InputTextWithHint("##filter", "Search", filter, filter_size, ImGuiInputTextFlags_AutoSelectAll);
+        auto filter_text = [](const std::string_view text, const std::string_view filter) {
+          return filter.empty() ||
+            std::search(text.cbegin(), text.cend(), filter.cbegin(), filter.cend(),
+            [](const char c1, const char c2) { // Search case-insensitive
+              return (('a' <= c1 && c1 <= 'z') ? static_cast<char>(c1 - ' ') : c1) == (('a' <= c2 && c2 <= 'z') ? static_cast<char>(c2 - ' ') : c2);
+                          }) != text.cend();
+          };
+
+        auto printShaderList = [&](ShaderType _shaderType) {
+          ShadersHashList& shadersList = shaderHasher.geShadersHashList(_shaderType);
+          for (auto& [hash, desc] : shadersList) {
+            std::string hashtToString = hashToString(hash);
+            if (filter_text(hashtToString, filter) == false)
+              continue;
+            bool binded = true;
+            if (selectedItem > 0) {
+              binded = shaderHasher.isShaderHashBinded(hash, _shaderType);
+            }
+            if (selectedItem == 2 && binded == false) {
+              continue;
+            }
+            ImGui::PushID(hash);
+            ImGuiStyle& style = ImGui::GetStyle();
+            // below is just a random color, as example
+            ImVec4 baseStyleColor = style.Colors[ImGuiCol_CheckMark];
+            if (selectedItem == 1 && binded == false) {
+              style.Colors[ImGuiCol_CheckMark] = ImVec4(1.0f, 0.0f, 0.0f, 1.00f);
+            }
+            ImGui::Checkbox(hashtToString.c_str(), &desc.activated);
+            style.Colors[ImGuiCol_CheckMark] = baseStyleColor;
+            if (ImGui::TreeNode("Advanced")) {
+              static const char* items[] = { "UI Hook", "Transparent", "Opaque", "Fur", "Sky", "Char Shadow" };
+              std::string selected = "";
+              uint32_t varID = 0;
+              for (const char* item : items) {
+                if ((desc.flags & (ShaderFlags) (1 << varID)) != ShaderFlags::None) {
+                  selected += items[varID];
+                  selected += " ";
+                }
+                ++varID;
+              }
+              if (ImGui::BeginCombo("Shader Flags", selected.c_str())) {
+                varID = 0;
+                for (const char* item : items) {
+                  bool selected = (desc.flags & (ShaderFlags) (1 << varID)) != ShaderFlags::None;
+                  if (ImGui::Selectable(item, &selected)) {
+                    if (selected)
+                      desc.flags = desc.flags | (ShaderFlags) (1 << varID);
+                    else
+                      desc.flags &= ~(ShaderFlags) (1 << varID);
+                  }
+                  ++varID;
+                }
+                ImGui::EndCombo();
+              }
+              if (ImGui::TreeNode("Constant Values")) {
+                static const char* constantTtype[] = { "Float", "Int", "Bool" };
+                for (uint32_t type = 0; type < 3; ++type) {
+                  if (ImGui::TreeNode(constantTtype[type])) {
+                    bool founded = false;
+                    const std::vector<Constant>& constants = shaderHasher.getConstants((D3D9ConstantType) type, hash, founded);
+                    if (founded) {
+                      for (const Constant& constant : constants) {
+                        ImGui::Text("Start Register %u", constant.m_startRegister);
+                        ImGui::SameLine();
+                        ImGui::Text("Count %u", constant.m_vector4Count);
+                        ImGui::PushID(constant.m_startRegister);
+                        if (ImGui::TreeNode("Value")) {
+                          printBuffer(constant.m_copy, constant.m_vector4Count * 4);
+                          ImGui::TreePop();
+                        }
+                        ImGui::PopID();
+                      }
+                    }
+                    ImGui::TreePop();
+                  }
+                }
+                ImGui::TreePop();
+              }
+              ImGui::TreePop();
+            }
+            ImGui::PopID();
+          }
+          };
+        if (ImGui::TreeNode("VertexShader")) {
+          printShaderList(ShaderType::Vertex);
+          ImGui::TreePop();
+        }
+        if (ImGui::TreeNode("PixelShader")) {
+          printShaderList(ShaderType::Pixel);
+          ImGui::TreePop();
+        }
+        ImGui::TreePop();
+      }
+      ImGui::Unindent();
+      ImGui::EndTabItem();
+    }
+    // MHFZ end
     ImGui::PopItemWidth();
     ImGui::EndTabBar();
   }

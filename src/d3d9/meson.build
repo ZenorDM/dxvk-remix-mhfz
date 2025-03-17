@@ -89,6 +89,8 @@ d3d9_src = [
   'd3d9_rtx_utils.h',
   'd3d9_rtx_geometry.cpp',
   'd3d9_swapchain_external.cpp',
+  'd3d9_shaders_hasher.cpp',
+  'd3d9_shaders_hasher.h'
 ]
 
 d3d9_dll = shared_library('d3d9', d3d9_src, dxvk_version, glsl_generator.process(d3d9_shaders), d3d9_res,

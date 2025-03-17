@@ -939,6 +939,24 @@ namespace dxvk {
       return m_samplerCount.load();
     }
 
+    // MHFZ start
+    bool IsShaderBindedActivated() {
+      return m_dxvkDevice->getShaderHasher().isShaderBindedActivated();
+    }
+
+    bool IsPreUIBinded() {
+      return m_dxvkDevice->getShaderHasher().isPreUIBinded();
+    }
+
+    bool IsShaderWorldBinded() {
+      return m_dxvkDevice->getShaderHasher().isShaderWorldBinded();
+    }
+
+    void ResetShaderHasher() {
+      return m_dxvkDevice->getShaderHasher().reset();
+    }
+    // MHFZ end
+    // 
 // NV-DXVK start: external API
     D3D9SwapchainExternal* GetExternalPresenter();
     D3D9Rtx& RTX() {

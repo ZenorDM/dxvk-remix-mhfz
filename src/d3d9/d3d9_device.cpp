@@ -2782,6 +2782,9 @@ namespace dxvk {
           ctx->draw(drawInfo.vertexCount, drawInfo.instanceCount, 0, 0);
         }
         ctx->bindVertexBuffer(0, DxvkBufferSlice(), 0);
+        // MHFZ start: reset spec constant
+        ctx->setSpecConstant(VK_PIPELINE_BIND_POINT_GRAPHICS, D3D9SpecConstantId::CustomVertexTransformEnabled, false);
+        // MHFZ end
       });
 
       m_state.vertexBuffers[0].vertexBuffer = nullptr;
@@ -3149,7 +3152,9 @@ namespace dxvk {
       return D3DERR_INVALIDCALL;
 
     *ppShader = ref(new D3D9VertexShader(this, module));
-
+    // MHFZ start: hash vertex shader
+    m_dxvkDevice->getShaderHasher().hashShader(VK_SHADER_STAGE_VERTEX_BIT, pFunction, (uint64_t) *ppShader);
+    // MHFZ end
     return D3D_OK;
   }
 
@@ -3181,7 +3186,9 @@ namespace dxvk {
         || newShader->GetMeta().maxConstIndexI > oldShader->GetMeta().maxConstIndexI
         || newShader->GetMeta().maxConstIndexB > oldShader->GetMeta().maxConstIndexB;
     }
-
+    // MHFZ start: mark as binded vertex shader
+    m_dxvkDevice->getShaderHasher().bindShader(VK_SHADER_STAGE_VERTEX_BIT, (uint64_t) pShader);
+    // MHFZ end
     m_state.vertexShader = shader;
 
     if (shader != nullptr) {
@@ -3493,7 +3500,9 @@ namespace dxvk {
       return D3DERR_INVALIDCALL;
 
     *ppShader = ref(new D3D9PixelShader(this, module));
-
+    // MHFZ start: hesh pixel shader
+    m_dxvkDevice->getShaderHasher().hashShader(VK_SHADER_STAGE_FRAGMENT_BIT, pFunction, (uint64_t) *ppShader);
+    // MHFZ end
     return D3D_OK;
   }
 
@@ -3526,6 +3535,9 @@ namespace dxvk {
         || newShader->GetMeta().maxConstIndexB > oldShader->GetMeta().maxConstIndexB;
     }
 
+    // MHFZ start: mark as binded pixel shader
+    m_dxvkDevice->getShaderHasher().bindShader(VK_SHADER_STAGE_FRAGMENT_BIT, (uint64_t) pShader);
+    // MHFZ end
     m_state.pixelShader = shader;
 
     if (shader != nullptr) {
@@ -7040,6 +7052,7 @@ namespace dxvk {
         m_state.material.Diffuse.b = pow(m_state.material.Diffuse.b, matPow.w);
       }
     }
+    m_dxvkDevice->getShaderHasher().pushConstant(ProgramType, ConstantType, StartRegister, Count, pConstantData);
     // MHFZ end
     if (unlikely(ShouldRecord()))
       return m_recorder->SetShaderConstants<ProgramType, ConstantType, T>(

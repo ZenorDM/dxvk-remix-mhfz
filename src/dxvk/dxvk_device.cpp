@@ -52,6 +52,8 @@ namespace dxvk {
     // NV-DXVK start: DLFG + RTXIO
     // Get desired queues from the device
 
+    m_shaderHasher.loadProfil();
+
     m_queues.graphics = getQueue(adapterQueueInfos.graphics.queueFamilyIndex, adapterQueueInfos.graphics.queueIndex);
     m_queues.transfer = getQueue(adapterQueueInfos.transfer.queueFamilyIndex, adapterQueueInfos.transfer.queueIndex);
 

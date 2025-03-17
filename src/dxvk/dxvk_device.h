@@ -47,6 +47,7 @@
 #include "../vulkan/vulkan_presenter.h"
 
 #include "../tracy/TracyVulkan.hpp"
+#include "../d3d9/d3d9_shaders_hasher.h"
 
 namespace dxvk {
   
@@ -634,6 +635,11 @@ namespace dxvk {
     }
     // NV-DXVK end
 
+    ShadersHasher& getShaderHasher() {
+      return m_shaderHasher;
+    }
+
+
   private:
     
     DxvkOptions                 m_options;
@@ -671,6 +677,8 @@ namespace dxvk {
     DxvkDeviceQueue getQueue(
             uint32_t                family,
             uint32_t                index) const;
+
+    ShadersHasher   m_shaderHasher;
     
   };
   

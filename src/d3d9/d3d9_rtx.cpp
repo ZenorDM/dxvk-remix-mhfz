@@ -160,21 +160,24 @@ namespace dxvk {
     // MHFZ start: to help with float precision issue fake world matrix to reduce local position captured value, world transform will be reinject with D3D9SpecConstantId::CustomVertexTransformEnabled
     Matrix4 ObjectToProjection;
     Matrix4 WorldToProj;
-    if (d3d9State().pixelShader.ptr() != nullptr) {
-      Matrix4 world;
-      memcpy(world.data, d3d9State().vsConsts.fConsts[195].data, 4 * 4 * sizeof(float));
+    if (m_parent->IsPreUIBinded() == false) {
+      if (d3d9State().pixelShader.ptr() != nullptr) {
+        Matrix4 world;
+        memcpy(world.data, d3d9State().vsConsts.fConsts[195].data, 4 * 4 * sizeof(float));
 
-      // clear world matrix
-      Matrix4 matrix;
-      memcpy(d3d9State().vsConsts.fConsts[38].data, matrix.data, 4 * 4 * sizeof(float));
-      memcpy(d3d9State().vsConsts.fConsts[42].data, matrix.data, 4 * 4 * sizeof(float));
-      memcpy(d3d9State().vsConsts.fConsts[195].data, matrix.data, 4 * 4 * sizeof(float));
-     
-      m_activeDrawCallState.transformData.objectToWorld = transpose(world);
+        // clear world matrix
+        Matrix4 matrix;
+        memcpy(d3d9State().vsConsts.fConsts[38].data, matrix.data, 4 * 4 * sizeof(float));
+        memcpy(d3d9State().vsConsts.fConsts[42].data, matrix.data, 4 * 4 * sizeof(float));
+        memcpy(d3d9State().vsConsts.fConsts[195].data, matrix.data, 4 * 4 * sizeof(float));
 
-      WorldToProj = m_activeDrawCallState.transformData.viewToProjection * m_activeDrawCallState.transformData.worldToView * m_activeDrawCallState.transformData.objectToWorld;
-    } else {
-      ObjectToProjection = m_activeDrawCallState.transformData.viewToProjection * m_activeDrawCallState.transformData.worldToView * m_activeDrawCallState.transformData.objectToWorld;
+        if (m_parent->IsShaderWorldBinded())
+          m_activeDrawCallState.transformData.objectToWorld = transpose(world);
+
+        WorldToProj = m_activeDrawCallState.transformData.viewToProjection * m_activeDrawCallState.transformData.worldToView * m_activeDrawCallState.transformData.objectToWorld;
+      } else {
+        ObjectToProjection = m_activeDrawCallState.transformData.viewToProjection * m_activeDrawCallState.transformData.worldToView * m_activeDrawCallState.transformData.objectToWorld;
+      }
     }
     // MHFZ end
 
@@ -211,24 +214,34 @@ namespace dxvk {
     }
 
     auto constants = m_vsVertexCaptureData->allocSlice();
+    if (m_parent->IsPreUIBinded()) {
+      // NOTE: May be better to move reverse transformation to end of frame, because this won't work if there hasnt been a FF draw this frame to scrape the matrix from...
+      ObjectToProjection = m_activeDrawCallState.transformData.viewToProjection * m_activeDrawCallState.transformData.worldToView * m_activeDrawCallState.transformData.objectToWorld;
+    }
 
     // Set constants required for vertex shader injection
     D3D9RtxVertexCaptureData& data = *(D3D9RtxVertexCaptureData*) constants.mapPtr;
     // Apply an inverse transform to get positions in object space (what renderer expects)
 
     // MHFZ start: save for reinject worl matrix
-    data.customWorldToProjection = WorldToProj;
+    if (m_parent->IsPreUIBinded() == false) {
+      data.customWorldToProjection = WorldToProj;
+    }
     // MHFZ end
     data.projectionToWorld = inverse(ObjectToProjection);
     data.normalTransform = m_activeDrawCallState.transformData.objectToWorld;
     data.baseVertex = (uint32_t)std::max(0, vertexIndexOffset);
 
-    m_parent->EmitCs([cVertexDataSlice = slice,
+    bool isPreUIBinded = m_parent->IsPreUIBinded();
+
+    m_parent->EmitCs([isPreUIBinded, cVertexDataSlice = slice,
                       cConstantBuffer = m_vsVertexCaptureData,
                       cConstants = constants](DxvkContext* ctx) {
 
       // MHFZ start: enable CustomVertexTransformEnabled
-      ctx->setSpecConstant(VK_PIPELINE_BIND_POINT_GRAPHICS, /*/D3D9SpecConstantId::CustomVertexTransformEnabled*/11, true);
+      if (isPreUIBinded == false) {
+        ctx->setSpecConstant(VK_PIPELINE_BIND_POINT_GRAPHICS, /*/D3D9SpecConstantId::CustomVertexTransformEnabled*/11, true);
+      }
       // MHFZ end
 
       // Bind the new constants to buffer
@@ -564,7 +577,7 @@ namespace dxvk {
     }
 
     // Check if UI texture bound
-    return checkBoundTextureCategory(RtxOptions::uiTextures());
+    return checkBoundTextureCategory(RtxOptions::uiTextures()) || m_parent->IsPreUIBinded();
   }
 
   PrepareDrawFlags D3D9Rtx::internalPrepareDraw(const IndexContext& indexContext, const VertexContext vertexContext[caps::MaxStreams], const DrawContext& drawContext) {
@@ -1103,7 +1116,7 @@ namespace dxvk {
 
   PrepareDrawFlags D3D9Rtx::PrepareDrawGeometryForRT(const bool indexed, const DrawContext& context) {
     // MHFZ start
-    bool ignoreDraw = d3d9State().isMaterialEnable() == false;
+    bool ignoreDraw = d3d9State().isMaterialEnable() == false || m_parent->IsShaderBindedActivated() == false;
     if (ignoreDraw) {
       return PrepareDrawFlag::Ignore;
     }
@@ -1159,7 +1172,7 @@ namespace dxvk {
                                                        const uint32_t vertexStride,
                                                        const DrawContext& drawContext) {
     // MHFZ start
-    bool ignoreDraw = d3d9State().isMaterialEnable() == false;
+    bool ignoreDraw = d3d9State().isMaterialEnable() == false || m_parent->IsShaderBindedActivated() == false;
     if (ignoreDraw) {
       return PrepareDrawFlag::Ignore;
     }

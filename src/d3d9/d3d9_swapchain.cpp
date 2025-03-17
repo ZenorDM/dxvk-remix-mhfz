@@ -519,6 +519,9 @@ namespace dxvk {
         return D3D_OK;
 
       PresentImage(presentInterval);
+      // MHFZ start: reset shader hasher manager
+      m_parent->ResetShaderHasher();
+      // MHFZ start
       return D3D_OK;
     } catch (const DxvkError& e) {
       Logger::err(e.message());
