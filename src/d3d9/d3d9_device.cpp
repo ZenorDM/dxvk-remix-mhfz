@@ -1323,7 +1323,9 @@ namespace dxvk {
 
     if (dstTextureInfo->IsAutomaticMip())
       MarkTextureMipsDirty(dstTextureInfo);
-
+    // MHFZ start
+    m_state.resetMaterialDiffuse();
+    // MHFZ end
     return D3D_OK;
   }
 
@@ -2596,15 +2598,27 @@ namespace dxvk {
 
     D3D9DeviceLock lock = LockDevice();
 
-    if (unlikely(m_state.vertexDecl == nullptr))
+    if (unlikely(m_state.vertexDecl == nullptr)) {
+      // MHFZ start
+      m_state.resetMaterialDiffuse();
+      // MHFZ end
       return D3DERR_INVALIDCALL;
+    }
 
-    if (unlikely(!PrimitiveCount))
+    if (unlikely(!PrimitiveCount)) {
+      // MHFZ start
+      m_state.resetMaterialDiffuse();
+      // MHFZ end
       return S_OK;
+    }
 
     // NV-DXVK start: geometry processing
     const D3D9Rtx::DrawContext drawContext { PrimitiveType, (INT) StartVertex, 0, 0, 0, PrimitiveCount, FALSE };
     const PrepareDrawFlags drawPrepare = m_rtx.PrepareDrawGeometryForRT(false, drawContext);
+
+    // MHFZ start
+    m_state.resetMaterialDiffuse();
+    // MHFZ end
 
     if ((drawPrepare & PrepareDrawFlag::ApplyDrawState) ||
         (drawPrepare & PrepareDrawFlag::OriginalDrawCall)) {
@@ -2650,15 +2664,27 @@ namespace dxvk {
 
     D3D9DeviceLock lock = LockDevice();
 
-    if (unlikely(m_state.vertexDecl == nullptr))
+    if (unlikely(m_state.vertexDecl == nullptr)) {
+      // MHFZ start
+      m_state.resetMaterialDiffuse();
+      // MHFZ end
       return D3DERR_INVALIDCALL;
+    }
 
-    if (unlikely(!PrimitiveCount))
+    if (unlikely(!PrimitiveCount)) {
+      // MHFZ start
+      m_state.resetMaterialDiffuse();
+      // MHFZ end
       return S_OK;
+    }
 
     // NV-DXVK start: geometry processing
     const D3D9Rtx::DrawContext drawContext = { PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, StartIndex, PrimitiveCount, TRUE };
     const PrepareDrawFlags drawPrepare = m_rtx.PrepareDrawGeometryForRT(true, drawContext);
+
+    // MHFZ start
+    m_state.resetMaterialDiffuse();
+    // MHFZ end
 
     if ((drawPrepare & PrepareDrawFlag::ApplyDrawState) ||
         (drawPrepare & PrepareDrawFlag::OriginalDrawCall)) {
@@ -2704,11 +2730,19 @@ namespace dxvk {
 
     D3D9DeviceLock lock = LockDevice();
 
-    if (unlikely(m_state.vertexDecl == nullptr))
+    if (unlikely(m_state.vertexDecl == nullptr)) {
+      // MHFZ start
+      m_state.resetMaterialDiffuse();
+      // MHFZ end
       return D3DERR_INVALIDCALL;
+    }
 
-    if (unlikely(!PrimitiveCount))
+    if (unlikely(!PrimitiveCount)) {
+      // MHFZ start
+      m_state.resetMaterialDiffuse();
+      // MHFZ end
       return S_OK;
+    }
 
     auto drawInfo = GenerateDrawInfo(PrimitiveType, PrimitiveCount, 0);
 
@@ -2721,6 +2755,10 @@ namespace dxvk {
     // NV-DXVK start: geometry processing
     const D3D9Rtx::DrawContext drawContext = { PrimitiveType, 0, 0, 0, 0, PrimitiveCount, FALSE };
     const PrepareDrawFlags drawPrepare = m_rtx.PrepareDrawUPGeometryForRT(false, upSlice, D3DFMT_UNKNOWN, 0, 0, dataSize, VertexStreamZeroStride, drawContext);
+
+    // MHFZ start
+    m_state.resetMaterialDiffuse();
+    // MHFZ end
 
     if ((drawPrepare & PrepareDrawFlag::ApplyDrawState) ||
         (drawPrepare & PrepareDrawFlag::OriginalDrawCall)) {
@@ -2773,11 +2811,19 @@ namespace dxvk {
 
     D3D9DeviceLock lock = LockDevice();
 
-    if (unlikely(m_state.vertexDecl == nullptr))
-        return D3DERR_INVALIDCALL;
+    if (unlikely(m_state.vertexDecl == nullptr)) {
+      // MHFZ start
+      m_state.resetMaterialDiffuse();
+      // MHFZ end
+      return D3DERR_INVALIDCALL;
+    }
 
-    if (unlikely(!PrimitiveCount))
+    if (unlikely(!PrimitiveCount)) {
+      // MHFZ start
+      m_state.resetMaterialDiffuse();
+      // MHFZ end
       return S_OK;
+    }
 
     auto drawInfo = GenerateDrawInfo(PrimitiveType, PrimitiveCount, 0);
 
@@ -2797,6 +2843,10 @@ namespace dxvk {
     // NV-DXVK start: geometry processing
     const D3D9Rtx::DrawContext drawContext = { PrimitiveType, 0, MinVertexIndex, NumVertices, 0, PrimitiveCount, TRUE };
     const PrepareDrawFlags drawPrepare = m_rtx.PrepareDrawUPGeometryForRT(true, upSlice, IndexDataFormat, indicesSize, vertexDataSize, vertexDataSize, VertexStreamZeroStride, drawContext);
+
+    // MHFZ start
+    m_state.resetMaterialDiffuse();
+    // MHFZ end
 
     if ((drawPrepare & PrepareDrawFlag::ApplyDrawState) ||
         (drawPrepare & PrepareDrawFlag::OriginalDrawCall)) {
@@ -2851,23 +2901,37 @@ namespace dxvk {
     ScopedCpuProfileZone();
     D3D9DeviceLock lock = LockDevice();
 
-    if (unlikely(pDestBuffer == nullptr || pVertexDecl == nullptr))
+    if (unlikely(pDestBuffer == nullptr || pVertexDecl == nullptr)) {
+      // MHFZ start
+      m_state.resetMaterialDiffuse();
+      // MHFZ end
       return D3DERR_INVALIDCALL;
+    }
 
     if (!SupportsSWVP()) {
       static bool s_errorShown = false;
 
       if (!std::exchange(s_errorShown, true))
         Logger::err("D3D9DeviceEx::ProcessVertices: SWVP emu unsupported (vertexPipelineStoresAndAtomics)");
-
+      // MHFZ start
+      m_state.resetMaterialDiffuse();
+      // MHFZ end
       return D3D_OK;
     }
 
-    if (!VertexCount)
+    if (!VertexCount) {
+      // MHFZ start
+      m_state.resetMaterialDiffuse();
+      // MHFZ end
       return D3D_OK;
+    }
 
     D3D9CommonBuffer* dst  = static_cast<D3D9VertexBuffer*>(pDestBuffer)->GetCommonBuffer();
     D3D9VertexDecl*   decl = static_cast<D3D9VertexDecl*>  (pVertexDecl);
+
+    // MHFZ start
+    m_state.resetMaterialDiffuse();
+    // MHFZ end
 
     PrepareDraw(D3DPT_FORCE_DWORD);
 
@@ -6954,6 +7018,29 @@ namespace dxvk {
     if (unlikely(pConstantData == nullptr))
       return D3DERR_INVALIDCALL;
 
+    // MHFZ start : emulate shader material computation
+    if constexpr (ProgramType == DxsoProgramType::VertexShader) {
+      if (StartRegister == 2 || StartRegister == 170) {
+
+        if (StartRegister == 2) {
+          m_state.resetMaterialDiffuse();
+        }
+        Vector4 diffuse;
+        memcpy(diffuse.data, (float*) pConstantData, Count * 4 * sizeof(float));
+        m_state.material.Diffuse.r *= clamp(diffuse.r, 0.0f, 1.0f);
+        m_state.material.Diffuse.g *= clamp(diffuse.g, 0.0f, 1.0f);
+        m_state.material.Diffuse.b *= clamp(diffuse.b, 0.0f, 1.0f);
+        m_state.material.Diffuse.a *= clamp(diffuse.a, 0.0f, 1.0f);
+      }
+      if (StartRegister == 4) {
+        Vector4 matPow;
+        memcpy(matPow.data, (float*) pConstantData, Count * 4 * sizeof(float));
+        m_state.material.Diffuse.r = pow(m_state.material.Diffuse.r, matPow.w);
+        m_state.material.Diffuse.g = pow(m_state.material.Diffuse.g, matPow.w);
+        m_state.material.Diffuse.b = pow(m_state.material.Diffuse.b, matPow.w);
+      }
+    }
+    // MHFZ end
     if (unlikely(ShouldRecord()))
       return m_recorder->SetShaderConstants<ProgramType, ConstantType, T>(
         StartRegister,

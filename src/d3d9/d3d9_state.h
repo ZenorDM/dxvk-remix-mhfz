@@ -279,6 +279,19 @@ namespace dxvk {
       const auto& indices = enabledLightIndices;
       return std::find(indices.begin(), indices.end(), Index) != indices.end();
     }
+
+    // MHFZ start
+    bool isMaterialEnable() const {
+      return material.Diffuse.a > 0.0f;
+    }
+
+    void resetMaterialDiffuse() {
+      material.Diffuse.r = 1.0f;
+      material.Diffuse.g = 1.0f;
+      material.Diffuse.b = 1.0f;
+      material.Diffuse.a = 1.0f;
+    }
+    // MHFZ end
   };
 
   template <

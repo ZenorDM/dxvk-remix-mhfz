@@ -22,6 +22,12 @@ namespace dxvk {
 
     for (uint32_t i = 0; i < enabledLightIndices.size(); i++)
       enabledLightIndices[i] = UINT32_MAX;
+    // MHFZ start
+    material.Diffuse.r = 1.0f;
+    material.Diffuse.g = 1.0f;
+    material.Diffuse.b = 1.0f;
+    material.Diffuse.a = 1.0f;
+    // MHFZ end
   }
 
   D3D9CapturableState::~D3D9CapturableState() {

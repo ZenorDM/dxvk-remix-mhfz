@@ -1102,6 +1102,13 @@ namespace dxvk {
   }
 
   PrepareDrawFlags D3D9Rtx::PrepareDrawGeometryForRT(const bool indexed, const DrawContext& context) {
+    // MHFZ start
+    bool ignoreDraw = d3d9State().isMaterialEnable() == false;
+    if (ignoreDraw) {
+      return PrepareDrawFlag::Ignore;
+    }
+    // MHFZ end
+
     if (!RtxOptions::Get()->enableRaytracing() || !m_enableDrawCallConversion) {
       return PrepareDrawFlag::PreserveDrawCallAndItsState;
     }
@@ -1151,6 +1158,13 @@ namespace dxvk {
                                                        const uint32_t vertexSize,
                                                        const uint32_t vertexStride,
                                                        const DrawContext& drawContext) {
+    // MHFZ start
+    bool ignoreDraw = d3d9State().isMaterialEnable() == false;
+    if (ignoreDraw) {
+      return PrepareDrawFlag::Ignore;
+    }
+    // MHFZ end
+
     if (!RtxOptions::Get()->enableRaytracing() || !m_enableDrawCallConversion) {
       return PrepareDrawFlag::PreserveDrawCallAndItsState;
     }
