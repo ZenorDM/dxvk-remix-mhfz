@@ -569,8 +569,10 @@ OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteractionCreate(
 
   if (albedoOpacityLoaded)
   {
-    albedo = albedoOpacitySample.rgb;
-
+    // MHFZ start : fix emisive color
+    albedo *= albedoOpacitySample.rgb;
+    // MHFZ end
+        
     // Note: Thin film thickness and opacity deriving their values from the alpha channel are mutually exclusive, set the appropriate
     // one based on the specified flags, and set the opposing variable to a default value (the "default" value must match how the material is decoded from the
     // GBuffer as well). Ideally we'd want to simply fall back on the existing opacity/thin film thickness constants instead, but we currently do not have a
@@ -585,7 +587,9 @@ OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteractionCreate(
     }
     else
     {
-      opacity = albedoOpacitySample.a;
+      // MHFZ start
+      opacity *= albedoOpacitySample.a;
+      // MHFZ end
       thinFilmThickness = float16_t(0.0f);
     }
   }

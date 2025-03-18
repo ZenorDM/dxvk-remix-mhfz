@@ -1067,6 +1067,10 @@ namespace dxvk {
           }
         }
 
+        // MHFZ start : legacyMaterialData.d3dMaterial.Diffuse contain shader material emulation done on cpu
+        albedoOpacityConstant = Vector4(legacyMaterialData.d3dMaterial.Diffuse.r, legacyMaterialData.d3dMaterial.Diffuse.g, legacyMaterialData.d3dMaterial.Diffuse.b, legacyMaterialData.d3dMaterial.Diffuse.a);
+        // MHFZ end
+
         if (RtxOptions::Get()->getHighlightLegacyModeEnabled()) {
           enableEmissive = true;
           // Flash every 20 frames, bright
@@ -1101,6 +1105,7 @@ namespace dxvk {
 
           albedoOpacityConstant.xyz() = opaqueMaterialData.getAlbedoConstant();
           albedoOpacityConstant.w = opaqueMaterialData.getOpacityConstant();
+
           metallicConstant = opaqueMaterialData.getMetallicConstant();
           roughnessConstant = opaqueMaterialData.getRoughnessConstant();
         }
