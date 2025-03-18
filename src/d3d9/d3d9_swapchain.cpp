@@ -520,7 +520,7 @@ namespace dxvk {
 
       PresentImage(presentInterval);
       // MHFZ start: reset shader hasher manager
-      m_parent->ResetShaderHasher();
+      m_parent->ResetFrame();
       // MHFZ start
       return D3D_OK;
     } catch (const DxvkError& e) {

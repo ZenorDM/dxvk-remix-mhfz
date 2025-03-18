@@ -952,8 +952,13 @@ namespace dxvk {
       return m_dxvkDevice->getShaderHasher().isShaderWorldBinded();
     }
 
-    void ResetShaderHasher() {
-      return m_dxvkDevice->getShaderHasher().reset();
+    void ResetFrame() {
+      // MHFZ start : experiment auto sky
+      if (m_rayTraceThisFrame == false)
+        RtxOptions::Get()->setSkyExtendSize(RtxOptions::skyBBoxExtendSizeMinimum());
+      m_rayTraceThisFrame = false;
+      // MHFZ end
+      m_dxvkDevice->getShaderHasher().reset();
     }
     // MHFZ end
     // 
@@ -1332,7 +1337,7 @@ namespace dxvk {
 // NV-DXVK start: external API
     bool                            m_withExternalSwapchain;
 // NV-DXVK end
-
+    bool                            m_rayTraceThisFrame = false;
   };
 
 }

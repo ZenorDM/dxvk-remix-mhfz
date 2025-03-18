@@ -926,6 +926,10 @@ namespace dxvk {
     RTX_OPTION_FLAG("rtx", uint32_t, skyUiDrawcallCount, 0, RtxOptionFlags::NoSave, "");
     RTX_OPTION("rtx", uint32_t, skyDrawcallIdThreshold, 0, "It's common in games to render the skybox first, and so, this value provides a simple mechanism to identify those early draw calls that are untextured (textured draw calls can still use the Sky Textures functionality.");
     RTX_OPTION("rtx", float, skyMinZThreshold, 1.f, "If a draw call's viewport has min depth greater than or equal to this threshold, then assume that it's a sky.");
+    // MHFZ start : experiment auto sky
+    RTX_OPTION("rtx", float, skyBBoxExtendSizeMinimum, 5000.f, "Every draw object with bounding box bigger than this value can be considered sky.");
+    RTX_OPTION("rtx", float, skyBBoxExtendSizeMaximum, 20'000'000.f, "Every draw object with bounding box shorter than this value can be considered sky.");
+    // MHFZ end
     RTX_OPTION("rtx", SkyAutoDetectMode, skyAutoDetect, SkyAutoDetectMode::None, 
                "Automatically tag sky draw calls using various heuristics.\n"
                "0 = None\n"
@@ -1375,5 +1379,15 @@ namespace dxvk {
     std::string getCurrentDirectory() const;
 
     bool shouldUseObsoleteHashOnTextureUpload() const { return useObsoleteHashOnTextureUpload(); }
+    // MHFZ start : experiment auto sky
+    float m_skyBBoxExtendSize = 0.0f;
+
+    float getSkyExtendSize() const {
+      return m_skyBBoxExtendSize;
+    }
+    void setSkyExtendSize(float extendSize) {
+      m_skyBBoxExtendSize = extendSize;
+    }
+    // MHFZ end
   };
 }

@@ -145,7 +145,11 @@ struct AxisAlignedBoundingBox {
       return transform[3].xyz();
     }
   }
-
+  // MHFZ start : experiment auto sky
+  float getHalfSize() const {
+    return length(maxPos - minPos) * 0.5f;
+  }
+  // MHFZ end
   const XXH64_hash_t calculateHash() const {
     return XXH3_64bits(this, sizeof(AxisAlignedBoundingBox));
   }
@@ -515,7 +519,7 @@ struct DrawCallState {
   bool isUsingRaytracedRenderTarget = false;
 
   void setupCategoriesForTexture();
-  void setupCategoriesForGeometry();
+  void setupCategoriesForGeometry(bool maySky);
   void setupCategoriesForHeuristics(uint32_t prevFrameSeenCamerasCount,
                                     std::vector<Vector3>& seenCameraPositions);
 

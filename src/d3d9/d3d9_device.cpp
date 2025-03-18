@@ -2646,6 +2646,9 @@ namespace dxvk {
 
     if (drawPrepare & PrepareDrawFlag::CommitToRayTracing) {
       m_rtx.CommitGeometryToRT(drawContext);
+      // MHFZ start : experiment auto sky
+      m_rayTraceThisFrame = true;
+      // MHFZ end
     }
     // NV-DXVK end
 
@@ -2714,6 +2717,9 @@ namespace dxvk {
 
     if (drawPrepare & PrepareDrawFlag::CommitToRayTracing) {
       m_rtx.CommitGeometryToRT(drawContext);
+      // MHFZ start : experiment auto sky
+      m_rayTraceThisFrame = true;
+      // MHFZ end
     }
     // NV-DXVK end
 
@@ -2794,6 +2800,9 @@ namespace dxvk {
 
     if (drawPrepare & PrepareDrawFlag::CommitToRayTracing) {
       m_rtx.CommitGeometryToRT(drawContext);
+      // MHFZ start : experiment auto sky
+      m_rayTraceThisFrame = true;
+      // MHFZ end
     }
     // NV-DXVK end
 
@@ -2887,6 +2896,9 @@ namespace dxvk {
 
     if (drawPrepare & PrepareDrawFlag::CommitToRayTracing) {
       m_rtx.CommitGeometryToRT(drawContext);
+      // MHFZ start : experiment auto sky
+      m_rayTraceThisFrame = true;
+      // MHFZ end
     }
     // NV-DXVK end
 

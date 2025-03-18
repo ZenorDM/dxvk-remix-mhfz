@@ -56,9 +56,18 @@ namespace dxvk {
 
       // Skinning processing will be finalized here, if object requires skinning
       finalizeSkinningData(pLastCamera);
+      // MHFZ start : experiment auto sky
+      float extendSize = geometryData.boundingBox.getHalfSize();
+
+      if (extendSize > RtxOptions::skyBBoxExtendSizeMinimum() && extendSize > RtxOptions::Get()->getSkyExtendSize() && extendSize < RtxOptions::skyBBoxExtendSizeMaximum()) {
+        RtxOptions::Get()->setSkyExtendSize(extendSize);
+      }
+
+      bool maySky = extendSize >= RtxOptions::Get()->getSkyExtendSize();
 
       // Update any categories that require geometry hash
-      setupCategoriesForGeometry();
+      setupCategoriesForGeometry(maySky);
+      // MHFZ end
 
       return true;
     }
@@ -168,10 +177,12 @@ namespace dxvk {
     setCategory(InstanceCategories::Sky, lookupHash(RtxOptions::skyBoxTextures(), textureHash));
   }
 
-  void DrawCallState::setupCategoriesForGeometry() {
+  // MHFZ start : experiment auto sky
+  void DrawCallState::setupCategoriesForGeometry(bool maySky) {
     const XXH64_hash_t assetReplacementHash = getHash(RtxOptions::Get()->GeometryAssetHashRule);
-    setCategory(InstanceCategories::Sky, lookupHash(RtxOptions::skyBoxGeometries(), assetReplacementHash));
+    setCategory(InstanceCategories::Sky, maySky || lookupHash(RtxOptions::skyBoxGeometries(), assetReplacementHash));
   }
+  // MHFZ end
 
   static std::optional<Vector3> makeCameraPosition(const Matrix4& worldToView,
                                                    bool zWrite,
