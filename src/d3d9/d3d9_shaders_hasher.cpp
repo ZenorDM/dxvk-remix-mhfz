@@ -59,6 +59,63 @@ namespace dxvk {
 
   ShadersHasher::ShadersHasher() { }
 
+
+  void ShadersHasher::parseShaderAsm(uint32_t shader_hash, ShaderDesc& shaderDesc, ShaderType shaderType) {
+    wchar_t file_prefix[MAX_PATH] = L"";
+    GetModuleFileNameW(nullptr, file_prefix, ARRAYSIZE(file_prefix));
+    std::filesystem::path asmPath = file_prefix;
+    asmPath = asmPath.parent_path();
+    if (shaderType == ShaderType::Vertex) {
+      asmPath /= "DumpShader/Vertex/asm";
+      std::string hash = std::to_string(shader_hash);
+      asmPath /= hash + ".asm";
+      std::ifstream file(asmPath);
+
+      std::string line;
+      while (getline(file, line)) {
+        if (line.find("gFadeColor") != std::string::npos) {
+          shaderDesc.constantVs.emplace(2);
+
+        }
+        if (line.find("gMaterialDiffuse") != std::string::npos) {
+          shaderDesc.constantVs.emplace(170);
+
+        }
+        if (line.find("gMaterialAlbedo") != std::string::npos) {
+          shaderDesc.constantVs.emplace(171);
+
+        }
+        if (line.find("gMatPower") != std::string::npos) {
+          shaderDesc.constantVs.emplace(4);
+
+        }
+        if (line.find("gAmbientColor") != std::string::npos) {
+          shaderDesc.constantVs.emplace(1);
+
+        }
+      }
+      file.close();
+    } else {
+      asmPath /= "DumpShader/Pixel/asm";
+      std::string hash = std::to_string(shader_hash);
+      asmPath /= hash + ".asm";
+      std::ifstream file(asmPath);
+
+      std::string line;
+      while (getline(file, line)) {
+        if (line.find("gMaterialDiffuse") != std::string::npos) {
+          shaderDesc.constantPs.emplace(170);
+        }
+        if (line.find("gMaterialAlbedo") != std::string::npos) {
+          shaderDesc.constantPs.emplace(171);
+        }
+
+      }
+      file.close();
+    }
+
+  }
+
   void ShadersHasher::hashShader(VkShaderStageFlagBits shaderType, const DWORD* pFunction, uint64_t shader) {
 
 
@@ -128,6 +185,29 @@ namespace dxvk {
     return true;
   }
 
+  bool ShadersHasher::isShaderBindedConstant(uint32_t constant, ShaderType shaderType) {
+
+    uint32_t i = (uint32_t) shaderType;
+
+    {
+      auto it = m_shadersToHash[i].find(m_currentBindedShader[i]);
+      if (it != m_shadersToHash[i].end()) {
+        auto itShader = m_shaders[i].find(it->second);
+        if (shaderType == ShaderType::Vertex) {
+          if (itShader != m_shaders[i].end() && itShader->second.constantVs.find(constant) != itShader->second.constantVs.end()) {
+            return true;
+          }
+        } else {
+          if (itShader != m_shaders[i].end() && itShader->second.constantPs.find(constant) != itShader->second.constantPs.end()) {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
+  }
+
   void ShadersHasher::reset() {
     m_preUIBindedThisFrame = false;
 
@@ -191,15 +271,17 @@ namespace dxvk {
     return false;
   }
 
-  static constexpr char* ShaderType[(uint32_t) ShaderType::Count] { "VertexShaders", "PixelShaders" };
+  static constexpr char* ShaderTypeStr[(uint32_t) ShaderType::Count] { "VertexShaders", "PixelShaders" };
 
   void to_json(json& j, const ShaderDesc& p) {
-    j = json { {"Activate", p.activated}, {"ShaderFlags", p.flags} };
+    j = json { {"Activate", p.activated}, {"ShaderFlags", p.flags} , {"ConstantVs", p.constantVs}, {"ConstantPs", p.constantPs} };
   }
 
   void from_json(const json& j, ShaderDesc& p) {
     j.at("Activate").get_to(p.activated);
     j.at("ShaderFlags").get_to(p.flags);
+    j.at("ConstantVs").get_to(p.constantVs);
+    j.at("ConstantPs").get_to(p.constantPs);
   }
 
   void ShadersHasher::loadProfil() {
@@ -232,7 +314,12 @@ namespace dxvk {
       Logger::err(error.c_str());
     }
     for (uint32_t i = 0; i < (uint32_t) ShaderType::Count; ++i) {
-      m_shaders[i] = j[ShaderType[i]].get<ShadersHashList>();
+      m_shaders[i] = j[ShaderTypeStr[i]].get<ShadersHashList>();
+#ifdef REMIX_DEVELOPMENT
+      for (auto& [hash, desc] : m_shaders[i]) {
+        parseShaderAsm(hash, desc, (ShaderType) i);
+      }
+#endif
     }
 
   }
@@ -252,7 +339,7 @@ namespace dxvk {
     dump_path /= "ShaderProfil.json";
 
     for (uint32_t i = 0; i < (uint32_t) ShaderType::Count; ++i) {
-      saveShaders(ShaderType[i], m_shaders[i]);
+      saveShaders(ShaderTypeStr[i], m_shaders[i]);
     }
 
     std::ofstream o { dump_path.c_str() };

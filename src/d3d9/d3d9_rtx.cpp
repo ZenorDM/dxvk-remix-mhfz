@@ -55,7 +55,50 @@ namespace dxvk {
   Direct3DState9& D3D9Rtx::d3d9State(){
     return *m_parent->GetRawState();
   }
-  // MHFZ start
+  // MHFZ end
+  // MHFZ start: emulate MHFZ shader computation of albedp all stored in diffuseEmulated and send to shader in albedoOpacityConstant
+  void D3D9Rtx::diffuseEstimation() {
+    if (RtxOptions::Get()->enableRaytracing()) {
+      d3d9State().diffuseEmulated = d3d9State().material.Diffuse;
+
+      bool fadeColor = m_parent->IsShaderBindedConstant(2, ShaderType::Vertex);
+      bool materialDiffuseVertex = m_parent->IsShaderBindedConstant(170, ShaderType::Vertex);
+
+      auto combineColor = [](const Vector4& input, D3DCOLORVALUE& ouput) {
+        ouput.r *= input.r;
+        ouput.g *= input.g;
+        ouput.b *= input.b;
+        ouput.a *= input.a;
+        };
+
+      if (fadeColor) {
+        combineColor(d3d9State().vsConsts.fConsts[2], d3d9State().diffuseEmulated);
+      }
+
+      if (materialDiffuseVertex) {
+        combineColor(d3d9State().vsConsts.fConsts[170], d3d9State().diffuseEmulated);
+      } else if (m_parent->IsShaderBindedConstant(170, ShaderType::Pixel)) {
+        combineColor(d3d9State().psConsts.fConsts[170], d3d9State().diffuseEmulated);
+      }
+
+      if (m_parent->IsShaderBindedConstant(171, ShaderType::Vertex)) {
+        combineColor(d3d9State().vsConsts.fConsts[171], d3d9State().diffuseEmulated);
+      } else if (m_parent->IsShaderBindedConstant(171, ShaderType::Pixel)) {
+        combineColor(d3d9State().psConsts.fConsts[171], d3d9State().diffuseEmulated);
+      }
+
+      if (m_parent->IsShaderBindedConstant(1, ShaderType::Vertex) && materialDiffuseVertex == false && fadeColor == false) {
+        combineColor(d3d9State().vsConsts.fConsts[1], d3d9State().diffuseEmulated);
+      }
+
+      if (m_parent->IsShaderBindedConstant(4, ShaderType::Vertex)) {
+        d3d9State().diffuseEmulated.r = pow(d3d9State().diffuseEmulated.r, d3d9State().vsConsts.fConsts[4].w);
+        d3d9State().diffuseEmulated.g = pow(d3d9State().diffuseEmulated.g, d3d9State().vsConsts.fConsts[4].w);
+        d3d9State().diffuseEmulated.b = pow(d3d9State().diffuseEmulated.b, d3d9State().vsConsts.fConsts[4].w);
+      }
+    }
+  }
+  // MHFZ end
 
   template<typename T>
   void D3D9Rtx::copyIndices(const uint32_t indexCount, T*& pIndicesDst, T* pIndices, uint32_t& minIndex, uint32_t& maxIndex) {
@@ -1116,6 +1159,8 @@ namespace dxvk {
 
   PrepareDrawFlags D3D9Rtx::PrepareDrawGeometryForRT(const bool indexed, const DrawContext& context) {
     // MHFZ start
+    diffuseEstimation();
+
     bool ignoreDraw = d3d9State().isMaterialEnable() == false || m_parent->IsShaderBindedActivated() == false;
     if (ignoreDraw) {
       return PrepareDrawFlag::Ignore;
@@ -1172,6 +1217,8 @@ namespace dxvk {
                                                        const uint32_t vertexStride,
                                                        const DrawContext& drawContext) {
     // MHFZ start
+    diffuseEstimation();
+
     bool ignoreDraw = d3d9State().isMaterialEnable() == false || m_parent->IsShaderBindedActivated() == false;
     if (ignoreDraw) {
       return PrepareDrawFlag::Ignore;

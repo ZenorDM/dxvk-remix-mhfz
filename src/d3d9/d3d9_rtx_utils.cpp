@@ -202,6 +202,9 @@ namespace dxvk {
     }
 
     materialData.d3dMaterial = d3d9State.material;
+    // MHFZ start: update diffuse with the emulated one to be sended to shaders
+    materialData.d3dMaterial.Diffuse = d3d9State.diffuseEmulated;
+    // MHFZ end
   }
 
   void setFogState(D3D9DeviceEx* pDevice, FogState& fogState) {

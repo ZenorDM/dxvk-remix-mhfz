@@ -281,15 +281,10 @@ namespace dxvk {
     }
 
     // MHFZ start
-    bool isMaterialEnable() const {
-      return material.Diffuse.a > 0.0f;
-    }
+    D3DCOLORVALUE   diffuseEmulated;
 
-    void resetMaterialDiffuse() {
-      material.Diffuse.r = 1.0f;
-      material.Diffuse.g = 1.0f;
-      material.Diffuse.b = 1.0f;
-      material.Diffuse.a = 1.0f;
+    bool isMaterialEnable() const {
+      return diffuseEmulated.a > 0.0f;
     }
     // MHFZ end
   };

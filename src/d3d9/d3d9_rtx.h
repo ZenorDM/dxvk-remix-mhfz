@@ -236,6 +236,9 @@ namespace dxvk {
     // MHFZ start: non constant state getter
     Direct3DState9& d3d9State();
     // MHFZ end
+    // MHFZ start:
+    void diffuseEstimation();
+    // MHFZ end
     template<typename T>
     static void copyIndices(const uint32_t indexCount, T*& pIndicesDst, T* pIndices, uint32_t& minIndex, uint32_t& maxIndex);
 

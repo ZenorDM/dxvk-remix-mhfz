@@ -47,6 +47,8 @@ namespace dxvk {
     bool activated = true;
 
     bool bindedWorldMatrix = false;
+    std::unordered_set<uint32_t> constantVs;
+    std::unordered_set<uint32_t> constantPs;
   };
 
   struct Constant {
@@ -86,6 +88,8 @@ namespace dxvk {
 
     bool isShaderHashBinded(uint32_t hash, ShaderType shaderType);
 
+    bool isShaderBindedConstant(uint32_t constant, ShaderType _shaderType);
+
     void loadProfil();
 
     void saveProfil();
@@ -94,6 +98,8 @@ namespace dxvk {
     const std::vector<Constant>& getConstants(D3D9ConstantType constantType, uint32_t hash, bool& founded) const;
 
   private:
+
+    void parseShaderAsm(uint32_t shader_hash, ShaderDesc& shaderDesc, ShaderType shaderType);
 
     ConstantList m_constants[3];
 

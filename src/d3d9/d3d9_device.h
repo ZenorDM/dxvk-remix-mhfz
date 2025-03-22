@@ -944,6 +944,10 @@ namespace dxvk {
       return m_dxvkDevice->getShaderHasher().isShaderBindedActivated();
     }
 
+    bool IsShaderBindedConstant(uint32_t constant, ShaderType shaderType) {
+      return m_dxvkDevice->getShaderHasher().isShaderBindedConstant(constant, shaderType);
+    }
+
     bool IsPreUIBinded() {
       return m_dxvkDevice->getShaderHasher().isPreUIBinded();
     }
