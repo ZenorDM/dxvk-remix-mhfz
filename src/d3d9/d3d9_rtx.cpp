@@ -56,7 +56,7 @@ namespace dxvk {
     return *m_parent->GetRawState();
   }
   // MHFZ end
-  // MHFZ start: emulate MHFZ shader computation of albedp all stored in diffuseEmulated and send to shader in albedoOpacityConstant
+  // MHFZ start: emulate MHFZ shader computation of albedo all stored in diffuseEmulated and send to shader in albedoOpacityConstant
   void D3D9Rtx::diffuseEstimation() {
     if (RtxOptions::Get()->enableRaytracing()) {
       d3d9State().diffuseEmulated = d3d9State().material.Diffuse;
