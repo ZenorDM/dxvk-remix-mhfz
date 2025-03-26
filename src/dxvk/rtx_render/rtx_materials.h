@@ -1431,6 +1431,24 @@ struct LegacyMaterialData {
     return colorTextures[1];
   }
 
+  // MHFZ start : legacy material custom textures getters
+  const TextureRef& getNormalTexture() const {
+    return normalTexture;
+  }
+
+  const TextureRef& getRoughnessTexture() const {
+    return roughnessTexture;
+  }
+
+  const TextureRef& getMetallicTexture() const {
+    return metallicTexture;
+  }
+
+  const TextureRef& getHeightTexture() const {
+    return heightTexture;
+  }
+  // MHFZ end
+
   const Rc<DxvkSampler>& getSampler() const {
     return samplers[0];
   }
@@ -1552,6 +1570,13 @@ private:
   Rc<DxvkSampler> samplers[kMaxSupportedTextures] = {};
   static_assert(kInvalidResourceSlot == 0 && "Below initialization of all array members is only valid for a value of 0.");
   uint32_t colorTextureSlot[kMaxSupportedTextures] = { kInvalidResourceSlot };
+
+  // MHFZ start : legacy material custom textures getters
+  TextureRef normalTexture = {};
+  TextureRef roughnessTexture = {};
+  TextureRef metallicTexture = {};
+  TextureRef heightTexture = {};
+  // MHFZ end
 
   XXH64_hash_t m_cachedHash = kEmptyHash;
 };

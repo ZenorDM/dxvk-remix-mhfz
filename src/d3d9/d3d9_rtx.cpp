@@ -185,6 +185,10 @@ namespace dxvk {
       Vector4 normal0;
     };
 
+    // MHFZ start: do not reduce local pos during rasterizer
+    bool reduceLocalPos = m_parent->IsPreUIBinded() == false;
+    // MHFZ end
+
     auto BoundShaderHas = [&](const D3D9CommonShader* shader, DxsoUsage usage, bool inOut)-> bool {
       if (shader == nullptr)
         return false;
@@ -203,7 +207,7 @@ namespace dxvk {
     // MHFZ start: to help with float precision issue fake world matrix to reduce local position captured value, world transform will be reinject with D3D9SpecConstantId::CustomVertexTransformEnabled
     Matrix4 ObjectToProjection;
     Matrix4 WorldToProj;
-    if (m_parent->IsPreUIBinded() == false) {
+    if (reduceLocalPos) {
       if (d3d9State().pixelShader.ptr() != nullptr) {
         Matrix4 world;
         memcpy(world.data, d3d9State().vsConsts.fConsts[195].data, 4 * 4 * sizeof(float));
@@ -257,7 +261,9 @@ namespace dxvk {
     }
 
     auto constants = m_vsVertexCaptureData->allocSlice();
-    if (m_parent->IsPreUIBinded()) {
+    // MHFZ start
+    if (reduceLocalPos == false) {
+    // MHFZ end
       // NOTE: May be better to move reverse transformation to end of frame, because this won't work if there hasnt been a FF draw this frame to scrape the matrix from...
       ObjectToProjection = m_activeDrawCallState.transformData.viewToProjection * m_activeDrawCallState.transformData.worldToView * m_activeDrawCallState.transformData.objectToWorld;
     }
@@ -267,7 +273,7 @@ namespace dxvk {
     // Apply an inverse transform to get positions in object space (what renderer expects)
 
     // MHFZ start: save for reinject worl matrix
-    if (m_parent->IsPreUIBinded() == false) {
+    if (reduceLocalPos) {
       data.customWorldToProjection = WorldToProj;
     }
     // MHFZ end
@@ -275,14 +281,12 @@ namespace dxvk {
     data.normalTransform = m_activeDrawCallState.transformData.objectToWorld;
     data.baseVertex = (uint32_t)std::max(0, vertexIndexOffset);
 
-    bool isPreUIBinded = m_parent->IsPreUIBinded();
-
-    m_parent->EmitCs([isPreUIBinded, cVertexDataSlice = slice,
+    m_parent->EmitCs([reduceLocalPos, cVertexDataSlice = slice,
                       cConstantBuffer = m_vsVertexCaptureData,
                       cConstants = constants](DxvkContext* ctx) {
 
       // MHFZ start: enable CustomVertexTransformEnabled
-      if (isPreUIBinded == false) {
+      if (reduceLocalPos) {
         ctx->setSpecConstant(VK_PIPELINE_BIND_POINT_GRAPHICS, /*/D3D9SpecConstantId::CustomVertexTransformEnabled*/11, true);
       }
       // MHFZ end
@@ -1070,9 +1074,21 @@ namespace dxvk {
       }
     }
 
+    // MHFZ start : reset all textures
+    for (uint32_t textureID = 1; textureID < LegacyMaterialData::kMaxSupportedTextures; textureID++) {
+      m_activeDrawCallState.materialData.colorTextures[textureID] = {};
+      m_activeDrawCallState.materialData.samplers[textureID] = {};
+      m_activeDrawCallState.materialData.normalTexture = {};
+      m_activeDrawCallState.materialData.roughnessTexture = {};
+      m_activeDrawCallState.materialData.metallicTexture = {};
+      m_activeDrawCallState.materialData.heightTexture = {};
+      m_activeDrawCallState.materialData.colorTextureSlot[textureID] = kInvalidResourceSlot;
+    }
+    // MHFZ end
+
     // Find the ideal textures for raytracing, initialize the data to invalid (out of range) to unbind unused textures
     uint32_t firstStage = 0;
-    for (uint32_t idx = 0, textureID = 0; idx < NumTexcoordBins && textureID < LegacyMaterialData::kMaxSupportedTextures; idx++) {
+    for (uint32_t idx = 0, textureID = 0; idx < 1 && textureID < LegacyMaterialData::kMaxSupportedTextures; idx++) {
       const uint8_t stage = FixedFunction ? texcoordIndexToStage[idx] : textureID;
       if (stage == kInvalidStage || d3d9State().textures[stage] == nullptr)
         continue;
@@ -1109,6 +1125,27 @@ namespace dxvk {
 
       // Cache the slot we want to bind
       const bool srgb = d3d9State().samplerStates[stage][D3DSAMP_SRGBTEXTURE] & 0x1;
+
+      // MHFZ start : gather all overwritten textures
+      auto legacyTextures = m_parent->GetLegacyManager().getTextures(d3d9State().textures[stage]);
+
+      if (legacyTextures.managedAlbedoTexture != nullptr) {
+        m_activeDrawCallState.materialData.colorTextures[1] = TextureRef(legacyTextures.managedAlbedoTexture);
+      }
+      if (legacyTextures.managedNormalTexture != nullptr) {
+        m_activeDrawCallState.materialData.normalTexture = TextureRef(legacyTextures.managedNormalTexture);
+      }
+      if (legacyTextures.managedRoughnessTexture != nullptr) {
+        m_activeDrawCallState.materialData.roughnessTexture = TextureRef(legacyTextures.managedRoughnessTexture);
+      }
+      if (legacyTextures.managedMetallicTexture != nullptr) {
+        m_activeDrawCallState.materialData.metallicTexture = TextureRef(legacyTextures.managedMetallicTexture);
+      }
+      if (legacyTextures.managedHeightTexture != nullptr) {
+        m_activeDrawCallState.materialData.heightTexture = TextureRef(legacyTextures.managedHeightTexture);
+      }
+      // MHFZ end
+
       m_activeDrawCallState.materialData.colorTextures[textureID] = TextureRef(pTexInfo->GetSampleView(srgb));
       m_activeDrawCallState.materialData.samplers[textureID] = sampler;
 

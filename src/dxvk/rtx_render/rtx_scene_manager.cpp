@@ -1063,12 +1063,42 @@ namespace dxvk {
         } else {
           if (defaults.useAlbedoTextureIfPresent()) {
             // NOTE: Do not patch original sampler to preserve filtering behavior of the legacy material
-            trackTexture(legacyMaterialData.getColorTexture(), albedoOpacityTextureIndex, hasTexcoords);
+            // MHFZ start : legacy material texture 2 is the new albedo texture
+            if (legacyMaterialData.getColorTexture2().isValid() && !legacyMaterialData.getColorTexture2().isImageEmpty()) {      
+              trackTexture(legacyMaterialData.getColorTexture2(), albedoOpacityTextureIndex, hasTexcoords);
+            }
+            // MHFZ end
+            else{
+              trackTexture(legacyMaterialData.getColorTexture(), albedoOpacityTextureIndex, hasTexcoords);
+            }
+
+            // MHFZ start : Bind legacy material custom texture
+            if (!legacyMaterialData.getNormalTexture().isImageEmpty() && legacyMaterialData.getNormalTexture().isValid()) {
+              trackTexture(legacyMaterialData.getNormalTexture(), normalTextureIndex, hasTexcoords);
+            }
+            if (!legacyMaterialData.getRoughnessTexture().isImageEmpty() && legacyMaterialData.getRoughnessTexture().isValid()) {
+              trackTexture(legacyMaterialData.getRoughnessTexture(), roughnessTextureIndex, hasTexcoords);
+            }
+            if (!legacyMaterialData.getMetallicTexture().isImageEmpty() && legacyMaterialData.getMetallicTexture().isValid()) {
+              trackTexture(legacyMaterialData.getMetallicTexture(), metallicTextureIndex, hasTexcoords);
+            }
+            if (!legacyMaterialData.getHeightTexture().isImageEmpty() && legacyMaterialData.getHeightTexture().isValid()) {
+              trackTexture(legacyMaterialData.getHeightTexture(), heightTextureIndex, hasTexcoords);
+            }
+            // MHFZ end
           }
         }
 
         // MHFZ start : legacyMaterialData.d3dMaterial.Diffuse contain shader material emulation done on cpu
         albedoOpacityConstant = Vector4(legacyMaterialData.d3dMaterial.Diffuse.r, legacyMaterialData.d3dMaterial.Diffuse.g, legacyMaterialData.d3dMaterial.Diffuse.b, legacyMaterialData.d3dMaterial.Diffuse.a);
+        // MHFZ end
+
+         // MHFZ start : If custom legacy material got heighTexture we enable displacement need to have better in out value
+        if (heightTextureIndex != kSurfaceMaterialInvalidTextureIndex) {
+          displaceIn = 1.0f;
+          displaceOut = 1.0f;
+          ++m_activePOMCount;
+        }
         // MHFZ end
 
         if (RtxOptions::Get()->getHighlightLegacyModeEnabled()) {

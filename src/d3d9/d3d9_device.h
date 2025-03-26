@@ -34,6 +34,10 @@
 #include "../util/util_flush.h"
 #include "../util/util_lru.h"
 
+// MHFZ start: required include
+#include "../dxvk/rtx_render/rtx_legacy_manager.h"
+// MHFZ end
+
 namespace dxvk {
 
   class D3D9InterfaceEx;
@@ -557,6 +561,11 @@ namespace dxvk {
 
     HRESULT STDMETHODCALLTYPE CreateQuery(D3DQUERYTYPE Type, IDirect3DQuery9** ppQuery);
 
+    // MHFZ start: custom IDirect3DDevice9 methods to get and destroy ovewrite textures
+    HRESULT STDMETHODCALLTYPE SendBaseTextureHash(UINT hash, IDirect3DBaseTexture9* texture);
+    HRESULT STDMETHODCALLTYPE DestroyBaseTexture(IDirect3DBaseTexture9* texture);
+    // MHFZ end
+
     // Ex Methods
 
     HRESULT STDMETHODCALLTYPE SetConvolutionMonoKernel(
@@ -964,6 +973,11 @@ namespace dxvk {
       // MHFZ end
       m_dxvkDevice->getShaderHasher().reset();
     }
+
+    LegacyManager& GetLegacyManager() {
+      return m_legacyManager;
+    }
+
     // MHFZ end
     // 
 // NV-DXVK start: external API
@@ -1341,7 +1355,11 @@ namespace dxvk {
 // NV-DXVK start: external API
     bool                            m_withExternalSwapchain;
 // NV-DXVK end
+    // MHFZ start
     bool                            m_rayTraceThisFrame = false;
+
+    LegacyManager                   m_legacyManager;
+    // MHFZ end
   };
 
 }

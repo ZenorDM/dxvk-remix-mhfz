@@ -2418,7 +2418,7 @@ namespace dxvk {
       return D3D_OK;
 
     DWORD stateSampler = RemapSamplerState(Stage);
-
+ 
     return SetStateTexture(stateSampler, pTexture);
   }
 
@@ -3684,6 +3684,24 @@ namespace dxvk {
   }
 
 
+  // MHFZ start: custom IDirect3DDevice9 methods to get and destroy ovewrite textures
+  HRESULT STDMETHODCALLTYPE D3D9DeviceEx::SendBaseTextureHash(UINT hash, IDirect3DBaseTexture9* texture) {
+    ScopedCpuProfileZone();
+
+    if (unlikely(ShouldRecord()))
+      return S_OK;
+
+    m_legacyManager.pushToLoad(hash, texture);
+
+    return S_OK;
+  }
+  
+  HRESULT STDMETHODCALLTYPE D3D9DeviceEx::DestroyBaseTexture(IDirect3DBaseTexture9* texture) {
+    m_legacyManager.destroyTexture(texture);
+    return S_OK;
+  }
+  // MHFZ end
+
   // Ex Methods
 
 
@@ -4061,6 +4079,10 @@ namespace dxvk {
   HRESULT D3D9DeviceEx::SetStateTexture(DWORD StateSampler, IDirect3DBaseTexture9* pTexture) {
     ScopedCpuProfileZone();
     D3D9DeviceLock lock = LockDevice();
+
+    // MHFZ start : update custom textures loading, todo move this to custom thread
+    m_legacyManager.updateLoadingThread(0, m_dxvkDevice->getCommon()->getTextureManager());
+    // MHFZ end
 
     if (unlikely(ShouldRecord()))
       return m_recorder->SetStateTexture(StateSampler, pTexture);
