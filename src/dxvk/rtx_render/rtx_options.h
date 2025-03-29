@@ -265,7 +265,9 @@ namespace dxvk {
     RW_RTX_OPTION("rtx", std::string, geometryAssetHashRuleString, "positions,indices,geometrydescriptor",
                   "Defines which hashes we need to include when sampling from replacements and doing USD capture.");
     RW_RTX_OPTION("rtx", fast_unordered_set, raytracedRenderTargetTextures, {}, "DescriptorHashes for Render Targets. (Screens that should display the output of another camera).");
-    
+    // MHFZ start
+    RW_RTX_OPTION("rtx", fast_unordered_set, customBlendTextures, {}, "MHFZ custom blend mode");
+    //MHFZ end
   public:
     RTX_OPTION("rtx", bool, showRaytracingOption, true, "Enables or disables the option to toggle ray tracing in the UI. When set to false the ray tracing checkbox will not appear in the Remix UI.");
 

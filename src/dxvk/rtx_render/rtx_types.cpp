@@ -56,8 +56,20 @@ namespace dxvk {
 
       // Skinning processing will be finalized here, if object requires skinning
       finalizeSkinningData(pLastCamera);
-      // MHFZ start : experiment auto sky
+      // MHFZ start : experiment auto sky and handle CustomBlend texture filter can only be applied to non fully opaque mesh
       float extendSize = geometryData.boundingBox.getHalfSize();
+
+      if (geometryData.boundingBox.fullyOpaqueVertexColor && testCategoryFlags(InstanceCategories::CustomBlend)) {
+        materialData.alphaBlendEnabled = false;
+        materialData.alphaTestEnabled = false;
+
+        geometryData.cullMode = VK_CULL_MODE_FRONT_BIT;
+        alphaBlendEnable = false;
+      }
+
+      if (geometryData.boundingBox.canBeCustomBlend == false) {
+        removeCategory(InstanceCategories::CustomBlend);
+      }
 
       if (extendSize > RtxOptions::skyBBoxExtendSizeMinimum() && extendSize > RtxOptions::Get()->getSkyExtendSize() && extendSize < RtxOptions::skyBBoxExtendSizeMaximum()) {
         RtxOptions::Get()->setSkyExtendSize(extendSize);
@@ -163,6 +175,7 @@ namespace dxvk {
     setCategory(InstanceCategories::Beam, lookupHash(RtxOptions::beamTextures(), textureHash));
     setCategory(InstanceCategories::IgnoreTransparencyLayer, lookupHash(RtxOptions::ignoreTransparencyLayerTextures(), textureHash));
 
+    setCategory(InstanceCategories::CustomBlend, lookupHash(RtxOptions::customBlendTextures(), textureHash));
     setCategory(InstanceCategories::DecalStatic, lookupHash(RtxOptions::decalTextures(), textureHash));
     setCategory(InstanceCategories::DecalDynamic, lookupHash(RtxOptions::dynamicDecalTextures(), textureHash));
     setCategory(InstanceCategories::DecalSingleOffset, lookupHash(RtxOptions::singleOffsetDecalTextures(), textureHash));

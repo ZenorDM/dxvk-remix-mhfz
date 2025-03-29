@@ -497,6 +497,8 @@ namespace dxvk {
            AntiCulling::Light::enable()  ||
            TerrainBaker::needsTerrainBaking() ||
            enableAlwaysCalculateAABB() ||
-           NeeCachePass::enable();
+      // MHFZ start : force MeshBoundingBox compute
+           NeeCachePass::enable() || true;
+      // MHFZ start
   }
 }

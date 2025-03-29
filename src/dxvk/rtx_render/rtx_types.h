@@ -116,7 +116,10 @@ struct RaytraceGeometry {
 struct AxisAlignedBoundingBox {
   Vector3 minPos{ FLT_MAX, FLT_MAX, FLT_MAX };
   Vector3 maxPos{ -FLT_MAX, -FLT_MAX, -FLT_MAX };
-
+  // MHFZ start : use to handle some mhfz meshes use as blend layer
+  bool canBeCustomBlend = false;
+  bool fullyOpaqueVertexColor = false;
+  // MHFZ end 
   const bool isValid() const {
     return minPos.x <= maxPos.x && minPos.y <= maxPos.y && minPos.z <= maxPos.z;
   }
@@ -441,13 +444,16 @@ enum class InstanceCategories : uint32_t {
   ThirdPersonPlayerBody,
   IgnoreBakedLighting,
   IgnoreTransparencyLayer,
-
+  // MHFZ start
+  CustomBlend,
+  // MHFZ end
   Count,
 };
 
 using CategoryFlags = Flags<InstanceCategories>;
-
-#define DECAL_CATEGORY_FLAGS InstanceCategories::DecalStatic, InstanceCategories::DecalDynamic, InstanceCategories::DecalSingleOffset, InstanceCategories::DecalNoOffset
+// MHFZ start
+#define DECAL_CATEGORY_FLAGS InstanceCategories::DecalStatic, InstanceCategories::DecalDynamic, InstanceCategories::DecalSingleOffset, InstanceCategories::DecalNoOffset, InstanceCategories::CustomBlend
+// MHFZ end
 
 struct DrawCallState {
   DrawCallState() = default;

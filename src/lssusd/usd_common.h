@@ -3,7 +3,9 @@
 namespace dxvk {
   // Used when readin/writing with Remix USD mods.
   static const char* getInstanceCategorySubKey(InstanceCategories cat) {
-    static_assert((uint32_t) InstanceCategories::Count == 23, "Please add/remove the category to the below table.");
+    // MHFZ s tart
+    static_assert((uint32_t) InstanceCategories::Count == 24, "Please add/remove the category to the below table.");
+    // MHFZ end
     switch (cat) {
     case InstanceCategories::WorldUI:
       return "remix_category:world_ui";
@@ -51,6 +53,10 @@ namespace dxvk {
       return "remix_category:ignore_baked_lighting";
     case InstanceCategories::IgnoreTransparencyLayer:
       return "remix_category:ignore_transparency_layer";
+    // MHFZ start
+    case InstanceCategories::CustomBlend:
+      return "remix_category:custom_Blend";
+    // MHFZ end
     default:
       Logger::err("Category key name requested, but no category found.");
       return "";
