@@ -35,6 +35,7 @@ namespace dxvk {
     Sky = 1 << 7,
     RejectDecal = 1 << 8,
     BackFaceCulling = 1 << 9,
+    NoFade = 1 << 10,
     Default = Albedo | Normal | Roughness | Metallic,
     All = Albedo | Normal | Roughness | Metallic | Height,
   };

@@ -1212,6 +1212,10 @@ namespace dxvk {
     constants.isZUp = RtxOptions::Get()->isZUp();
     constants.enableCullingSecondaryRays = RtxOptions::Get()->enableCullingInSecondaryRays();
 
+    // MHFZ start : fade opacity near camera
+    constants.nearFadeDistance = RtxOptions::Get()->nearFadeDistance();
+    // MHFZ end
+
     constants.domeLightArgs = getSceneManager().getLightManager().getDomeLightArgs();
 
     // Ray miss value handling

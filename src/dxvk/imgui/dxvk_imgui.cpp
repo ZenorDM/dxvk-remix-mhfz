@@ -1940,6 +1940,7 @@ namespace dxvk {
                   drawFeature("Sky", LegacyMaterialFeature::Sky);
                   drawFeature("RejectDecal", LegacyMaterialFeature::RejectDecal);
                   drawFeature("BackFaceCulling", LegacyMaterialFeature::BackFaceCulling);
+                  drawFeature("NoFade", LegacyMaterialFeature::NoFade);
 
                   ImGui::TreePop();
                 }
@@ -2854,6 +2855,8 @@ namespace dxvk {
         ShadersHasher& shaderHasher = device->getShaderHasher();
         shaderHasher.saveProfil();
       }
+
+      ImGui::SliderFloat("Near fade distance", &RtxOptions::Get()->nearFadeDistanceObject(), 0.0f, 1.0f);
 
       if (ImGui::TreeNode("Shaders")) {
         DxvkDevice* device = ctx->getCommonObjects()->getSceneManager().device();

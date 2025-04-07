@@ -418,7 +418,7 @@ struct RtOpaqueSurfaceMaterial {
     uint32_t subsurfaceMaterialIndex, bool isRaytracedRenderTarget,
     uint16_t samplerFeedbackStamp, 
     // MHFZ start : custom material params
-    float normalIntensity, float softBlendFactor, bool normalizeVertexColor, bool rejectDecal, float alphaBias
+    float normalIntensity, float softBlendFactor, bool normalizeVertexColor, bool rejectDecal, float alphaBias, bool noFade
     // MHFZ end
   ) :
     m_albedoOpacityTextureIndex{ albedoOpacityTextureIndex }, m_normalTextureIndex{ normalTextureIndex },
@@ -433,7 +433,7 @@ struct RtOpaqueSurfaceMaterial {
     m_displaceOut{ displaceOut }, m_subsurfaceMaterialIndex(subsurfaceMaterialIndex), m_isRaytracedRenderTarget(isRaytracedRenderTarget),
     m_samplerFeedbackStamp{ samplerFeedbackStamp },
     // MHFZ start : custom material params
-    m_normalIntensity{ normalIntensity }, m_softBlendFactor{ softBlendFactor }, m_normalizeVertexColor { normalizeVertexColor }, m_rejectDecal{ rejectDecal },m_alphaBias { alphaBias }
+    m_normalIntensity{ normalIntensity }, m_softBlendFactor{ softBlendFactor }, m_normalizeVertexColor { normalizeVertexColor }, m_rejectDecal{ rejectDecal },m_alphaBias { alphaBias }, m_noFade{ noFade }
     // MHFZ end
   {
     updateCachedData();
@@ -468,7 +468,8 @@ struct RtOpaqueSurfaceMaterial {
     }
 
     // MHFZ start : custom material flags to activate vertex color "normalization"
-    // and add a reject decal flag in order to have surface not take into account by decals
+    //  add a reject decal flag in order to have surface not take into account by decals
+    //  add NoFade  flags to avoid fading opacity near camera
     if (m_normalizeVertexColor) {
       flags |= OPAQUE_SURFACE_MATERIAL_FLAG_NORMALIZE_VERTEX_COLOR;
     }
@@ -476,6 +477,11 @@ struct RtOpaqueSurfaceMaterial {
     if (m_rejectDecal) {
       flags |= OPAQUE_SURFACE_MATERIAL_FLAG_REJECT_DECAL;
     }
+
+    if (m_noFade) {
+      flags |= OPAQUE_SURFACE_MATERIAL_FLAG_NO_FADE;
+    }
+
     // MHFZ end
 
     float displaceIn = m_displaceIn * getDisplacementFactor();
@@ -737,6 +743,7 @@ private:
   float m_alphaBias;
   bool  m_normalizeVertexColor;
   bool  m_rejectDecal;
+  bool  m_noFade;
   // MHFZ end
 };
 

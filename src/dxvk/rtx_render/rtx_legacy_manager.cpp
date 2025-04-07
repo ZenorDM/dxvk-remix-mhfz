@@ -294,6 +294,9 @@ namespace dxvk {
       }
     }
     auto [it,_] = m_legacyMaterialsLayer.try_emplace(texturehash, LegacyMaterialLayer {});
+    if (origin == TextureOrigin::Extend) {
+      it->second.features |= LegacyMaterialFeature::NoFade;
+    }
     m_textures[0].emplace(texture, LegacyTexture { texturehash , albedoPath, normalPath, roughnessPath, metallicPath, heightPath, origin, &(it->second) });
 
   }

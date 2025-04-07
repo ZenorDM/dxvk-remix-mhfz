@@ -459,6 +459,9 @@ namespace dxvk {
     RTX_OPTION("rtx", bool, showUICursor, true, "");
     RTX_OPTION_FLAG("rtx", bool, blockInputToGameInUI, true, RtxOptionFlags::NoSave, "");
 
+    // MHFZ start : fade opacity near camera
+    RTX_OPTION("rtx", float, nearFadeDistance, 0.0f, "Fade opacity when objects are near the camera");
+    //MHFZ end
   private:
     VirtualKeys m_remixMenuKeyBinds;
   public:

@@ -378,5 +378,8 @@ struct RaytraceArgs {
   // hence why it is not named enableNrcTraining here
   uint allowNrcTraining;
 
+  // MHFZ start : fade opacity near camera  
+  float nearFadeDistance;
+  // MHFZ end
   // NOTE: Add structs to the top section of RaytraceArgs, not the bottom.
 };

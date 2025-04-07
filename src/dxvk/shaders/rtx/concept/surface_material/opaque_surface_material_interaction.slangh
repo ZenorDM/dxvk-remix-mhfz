@@ -472,7 +472,9 @@ OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteractionCreate(
   OpaqueSurfaceMaterial opaqueSurfaceMaterial,
   Surface surface,
   inout SurfaceInteraction surfaceInteraction,
-  MinimalRayInteraction minimalRayInteraction)
+  // MHFZ start change to complete ray interaction to acess cone radius
+  RayInteraction rayInteraction)
+  // MHFZ end
 {
   OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteraction;
   // Note: need initialize the flags explicitely to get rid of garbage data.
@@ -494,7 +496,7 @@ OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteractionCreate(
     const mat3 worldToTexture = inverse(transpose(mat3(surfaceInteraction.rawTangent, surfaceInteraction.rawBitangent, surfaceInteraction.interpolatedNormal)));
     // TextureGradient x might be along the same direction as the view ray?  make a debug view that shows the dot product between textureGradient.x and viewDirTangentSpace?
 
-    f16vec3 viewDirTextureSpace = normalize(mul(worldToTexture, minimalRayInteraction.viewDirection));
+    f16vec3 viewDirTextureSpace = normalize(mul(worldToTexture, rayInteraction.viewDirection));
     // Note: -1.f * TextureGradientX has the same x,y direction as viewDirTextureSpace, but calculating the correct z value is non-obvious.
     // Could potentially remove the need for the worldToTexture transform if a faster way to calculate that z value is found.
     
@@ -805,7 +807,7 @@ OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteractionCreate(
   // (which will not look correct on materials with weird blend modes that do things like invert alpha).
   const f16vec3 originalAlbedo = albedo;
 
-  opaqueSurfaceMaterialInteraction.shadingNormal = getBentNormal(surfaceInteraction.triangleNormal, normal, -minimalRayInteraction.viewDirection);
+  opaqueSurfaceMaterialInteraction.shadingNormal = getBentNormal(surfaceInteraction.triangleNormal, normal, -rayInteraction.viewDirection);
   opaqueSurfaceMaterialInteraction.normalDetail = normalDetail;
   // Todo: Shading tangent/bitangent for anisotropy?
   opaqueSurfaceMaterialInteraction.opacity = opacity;
@@ -856,6 +858,12 @@ OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteractionCreate(
   opaqueSurfaceMaterialInteraction.subsurfaceMaterialInteraction =
     subSurfaceMaterialReadHelper(opaqueSurfaceMaterial.subsurfaceMaterialIndex, surfaceInteraction, opaqueSurfaceMaterial.samplerIndex);
 
+  // MHFZ start : fade opacity according to cone radius and a nearFadeDistance params
+  if ((opaqueSurfaceMaterial.flags & OPAQUE_SURFACE_MATERIAL_FLAG_NO_FADE) == 0) {
+      float fadeFactor = saturate((rayInteraction.coneRadius) / (cb.nearFadeDistance + 0.0001));
+      opaqueSurfaceMaterialInteraction.opacity = saturate(opaqueSurfaceMaterialInteraction.opacity * mix(0.0, 1.0, pow(fadeFactor,5)));
+  }
+  // MHFZ end
   return opaqueSurfaceMaterialInteraction;
 }
 
