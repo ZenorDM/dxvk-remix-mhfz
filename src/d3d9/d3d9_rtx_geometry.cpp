@@ -226,6 +226,7 @@ namespace dxvk {
 
     const void* pVertexData = geoData.positionBuffer.mapPtr((size_t)geoData.positionBuffer.offsetFromSlice());
     // MHFZ start : visit color buffer to suppose if the mesh can be use as a custom blend mesh
+    bool haveColorBuffer = geoData.color0Buffer.buffer().ptr() != nullptr;
     void* cVertexData = geoData.positionBuffer.mapPtr((size_t) geoData.color0Buffer.offsetFromSlice());
     const size_t colorStride = geoData.color0Buffer.stride();
     // MHFZ end
@@ -236,14 +237,17 @@ namespace dxvk {
       return Future<AxisAlignedBoundingBox>();
     }
     // MHFZ start
-    auto colorBuffer = geoData.color0Buffer.buffer().ptr();
-    colorBuffer->incRef();
+    DxvkBuffer* colorBuffer;
+    if (haveColorBuffer) {
+      colorBuffer = geoData.color0Buffer.buffer().ptr();
+      colorBuffer->incRef();
+    }
     // MHFZ end
     auto vertexBuffer = geoData.positionBuffer.buffer().ptr();
     vertexBuffer->incRef();
 
     // MHFZ start
-    return m_pGeometryWorkers->Schedule([pVertexData, vertexCount, vertexStride, vertexBuffer, cVertexData, colorBuffer, colorStride]()->AxisAlignedBoundingBox {
+    return m_pGeometryWorkers->Schedule([pVertexData, vertexCount, vertexStride, vertexBuffer, cVertexData, colorBuffer, colorStride, haveColorBuffer]()->AxisAlignedBoundingBox {
     // MHFZ end
       ScopedCpuProfileZone();
 
@@ -260,10 +264,12 @@ namespace dxvk {
       for (uint32_t vertexIdx = 0; vertexIdx < vertexCount; ++vertexIdx) {
         const Vector3* const pVertexPos = reinterpret_cast<const Vector3* const>(pVertex);
         // MHFZ start
-        uint8_t* colorVertex = cVertex;
-        colorVertex += 3*(sizeof(char));
-        canBeCustomBlend |= *colorVertex != 0xFF;
-        fullyOpaqueVertexColor &= *colorVertex == 0xFF;
+        if (haveColorBuffer) {
+          uint8_t* colorVertex = cVertex;
+          colorVertex += 3 * (sizeof(char));
+          canBeCustomBlend |= *colorVertex != 0xFF;
+          fullyOpaqueVertexColor &= *colorVertex == 0xFF;
+        }
         // MHFZ end
 
         __m128 vertexPos = _mm_set_ps(0.0f, pVertexPos->z, pVertexPos->y, pVertexPos->x);
@@ -286,7 +292,9 @@ namespace dxvk {
 
       vertexBuffer->decRef();
       // MHFZ start
-      colorBuffer->decRef();
+      if (haveColorBuffer) {
+        colorBuffer->decRef();
+      }
       // MHFZ end
 
       return boundingBox;

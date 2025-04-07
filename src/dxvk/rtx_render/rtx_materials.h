@@ -31,6 +31,9 @@
 #include "../../dxso/dxso_util.h"
 #include "rtx_material_data.h"
 #include "../../lssusd/mdl_helpers.h"
+// MHFZ start : required include
+#include "rtx_legacy_manager.h"
+// MHFZ end
 
 namespace dxvk {
 // Surfaces
@@ -413,7 +416,10 @@ struct RtOpaqueSurfaceMaterial {
     bool ignoreAlphaChannel, bool enableThinFilm, bool alphaIsThinFilmThickness, float thinFilmThicknessConstant,
     uint32_t samplerIndex, float displaceIn, float displaceOut,
     uint32_t subsurfaceMaterialIndex, bool isRaytracedRenderTarget,
-    uint16_t samplerFeedbackStamp
+    uint16_t samplerFeedbackStamp, 
+    // MHFZ start : custom material params
+    float normalIntensity, float softBlendFactor, bool normalizeVertexColor, bool rejectDecal, float alphaBias
+    // MHFZ end
   ) :
     m_albedoOpacityTextureIndex{ albedoOpacityTextureIndex }, m_normalTextureIndex{ normalTextureIndex },
     m_tangentTextureIndex { tangentTextureIndex }, m_heightTextureIndex { heightTextureIndex }, m_roughnessTextureIndex{ roughnessTextureIndex },
@@ -425,7 +431,10 @@ struct RtOpaqueSurfaceMaterial {
     m_ignoreAlphaChannel { ignoreAlphaChannel }, m_enableThinFilm { enableThinFilm }, m_alphaIsThinFilmThickness { alphaIsThinFilmThickness },
     m_thinFilmThicknessConstant { thinFilmThicknessConstant }, m_samplerIndex{ samplerIndex }, m_displaceIn{ displaceIn },
     m_displaceOut{ displaceOut }, m_subsurfaceMaterialIndex(subsurfaceMaterialIndex), m_isRaytracedRenderTarget(isRaytracedRenderTarget),
-    m_samplerFeedbackStamp{ samplerFeedbackStamp }
+    m_samplerFeedbackStamp{ samplerFeedbackStamp },
+    // MHFZ start : custom material params
+    m_normalIntensity{ normalIntensity }, m_softBlendFactor{ softBlendFactor }, m_normalizeVertexColor { normalizeVertexColor }, m_rejectDecal{ rejectDecal },m_alphaBias { alphaBias }
+    // MHFZ end
   {
     updateCachedData();
     updateCachedHash();
@@ -457,6 +466,17 @@ struct RtOpaqueSurfaceMaterial {
     if (m_isRaytracedRenderTarget) {
       flags |= OPAQUE_SURFACE_MATERIAL_FLAG_IS_RAYTRACED_RENDER_TARGET;
     }
+
+    // MHFZ start : custom material flags to activate vertex color "normalization"
+    // and add a reject decal flag in order to have surface not take into account by decals
+    if (m_normalizeVertexColor) {
+      flags |= OPAQUE_SURFACE_MATERIAL_FLAG_NORMALIZE_VERTEX_COLOR;
+    }
+
+    if (m_rejectDecal) {
+      flags |= OPAQUE_SURFACE_MATERIAL_FLAG_REJECT_DECAL;
+    }
+    // MHFZ end
 
     float displaceIn = m_displaceIn * getDisplacementFactor();
     float displaceOut = m_displaceOut * getDisplacementFactor();
@@ -511,9 +531,15 @@ struct RtOpaqueSurfaceMaterial {
 
     // data[24]
     writeGPUHelperExplicit<2>(data, offset, m_samplerFeedbackStamp);
+    
+    // MHFZ start : write cutom material params
+    writeGPUHelper(data, offset, glm::packHalf1x16(m_normalIntensity));
+    writeGPUHelper(data, offset, glm::packHalf1x16(m_softBlendFactor));
+    writeGPUHelper(data, offset, glm::packHalf1x16(m_alphaBias));
+    // MHFZ end
 
-    // data[25 - 31]
-    writeGPUPadding<14>(data, offset);
+    // data[28 - 31]
+    writeGPUPadding<8>(data, offset);
     assert(offset - oldOffset == kSurfaceMaterialGPUSize);
   }
 
@@ -528,6 +554,12 @@ struct RtOpaqueSurfaceMaterial {
 
     return !hasTexture || m_samplerIndex != kSurfaceMaterialInvalidTextureIndex;
   }
+
+  // MHFZ start : enable or disable emissive
+  void postCalculateBlendEmmisiveAdjust(bool blendEmissive) {
+    m_cachedEmissiveIntensity = m_enableEmission || blendEmissive ? m_emissiveIntensity : 0;
+  }
+  // MHFZ end
 
   bool hasValidDisplacement() const {
     return (m_displaceIn > 0.f || m_displaceOut > 0.f) && m_heightTextureIndex != BINDING_INDEX_INVALID;
@@ -637,6 +669,13 @@ private:
     h = XXH64(&m_subsurfaceMaterialIndex, sizeof(m_subsurfaceMaterialIndex), h);
     h = XXH64(&m_isRaytracedRenderTarget, sizeof(m_isRaytracedRenderTarget), h);
     h = XXH64(&m_samplerFeedbackStamp, sizeof(m_samplerFeedbackStamp), h);
+    // MHFZ start
+    h = XXH64(&m_normalIntensity, sizeof(m_normalIntensity), h);
+    h = XXH64(&m_softBlendFactor, sizeof(m_softBlendFactor), h);
+    h = XXH64(&m_alphaBias, sizeof(m_alphaBias), h);
+    h = XXH64(&m_normalizeVertexColor, sizeof(m_normalizeVertexColor), h);
+    h = XXH64(&m_rejectDecal, sizeof(m_rejectDecal), h);
+    // MHFZ end
 
     m_cachedHash = h;
   }
@@ -692,6 +731,13 @@ private:
   // Note: Cached values are not involved in the hash as they are derived from the input data
   float m_cachedEmissiveIntensity;
   float m_cachedThinFilmNormalizedThicknessConstant;
+  // MHFZ start : cutom material members
+  float m_normalIntensity;
+  float m_softBlendFactor;
+  float m_alphaBias;
+  bool  m_normalizeVertexColor;
+  bool  m_rejectDecal;
+  // MHFZ end
 };
 
 struct RtTranslucentSurfaceMaterial {
@@ -815,8 +861,11 @@ private:
 
     // Note: Translucent material does not take an emissive radiance directly, so zeroing out the intensity works
     // fine as a way to disable it (in case a texture is in use).
-    m_cachedEmissiveIntensity = std::min(m_enableEmission ? m_emissiveIntensity : 0.0f, FLOAT16_MAX);
-
+    
+    // MHFZ start : move enable disable emissive into postCalculateBlendEmmisiveAdjust
+    m_cachedEmissiveIntensity = std::min(m_emissiveIntensity, FLOAT16_MAX);
+    // MHFZ end
+    
     // Note: Ensure the transmittance measurement distance or thickness was encoded properly by ensuring
     // it is not 0. This is because we currently do not actually check the sign bit but just use a less than
     // comparison to check the sign bit as neither of these values should be 0 in valid materials.
@@ -1329,6 +1378,14 @@ struct RtSurfaceMaterial {
     return m_type;
   }
 
+  // MHFZ start : non const getter
+  RtOpaqueSurfaceMaterial& getOpaqueSurfaceMaterial() {
+    assert(m_type == RtSurfaceMaterialType::Opaque);
+
+    return m_opaqueSurfaceMaterial;
+  }
+  // MHFZ end
+
   const RtOpaqueSurfaceMaterial& getOpaqueSurfaceMaterial() const {
     assert(m_type == RtSurfaceMaterialType::Opaque);
 
@@ -1550,6 +1607,16 @@ struct LegacyMaterialData {
     m_cachedHash = hash;
   }
 
+  // MHFZ start : legacy material layer getters
+  LegacyMaterialLayer* getLegacyMaterialLayer() {
+    return materialLayer;
+  }
+
+  const LegacyMaterialLayer* getLegacyMaterialLayer() const {
+    return materialLayer;
+  }
+  // MHFZ end 
+
 private:
   friend class RtxContext;
   friend struct D3D9Rtx;
@@ -1571,11 +1638,12 @@ private:
   static_assert(kInvalidResourceSlot == 0 && "Below initialization of all array members is only valid for a value of 0.");
   uint32_t colorTextureSlot[kMaxSupportedTextures] = { kInvalidResourceSlot };
 
-  // MHFZ start : legacy material custom textures getters
+  // MHFZ start : legacy material custom textures and material layer
   TextureRef normalTexture = {};
   TextureRef roughnessTexture = {};
   TextureRef metallicTexture = {};
   TextureRef heightTexture = {};
+  LegacyMaterialLayer* materialLayer;
   // MHFZ end
 
   XXH64_hash_t m_cachedHash = kEmptyHash;

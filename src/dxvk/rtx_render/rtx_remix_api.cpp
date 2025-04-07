@@ -1051,7 +1051,9 @@ namespace {
       dxvk::Vector2i{ pixelRegion->left, pixelRegion->top },
       dxvk::Vector2i{ pixelRegion->right, pixelRegion->bottom },
       // invoke user's callback on result
-      [callback, callbackUserData](std::vector<dxvk::ObjectPickingValue>&& objectPickingValues, std::optional<XXH64_hash_t>) {
+      // MHFZ start : picking callback also retrieve mesh hash
+      [callback, callbackUserData](std::vector<dxvk::ObjectPickingValue>&& objectPickingValues, std::optional<std::pair<XXH64_hash_t, XXH64_hash_t>>) {
+      // MHFZ end
         callback(objectPickingValues.data(), uint32_t(objectPickingValues.size()), callbackUserData);
       }
     );

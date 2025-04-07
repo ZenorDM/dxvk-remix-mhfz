@@ -46,7 +46,7 @@ namespace dxvk {
     }
   }
 
-  bool DrawCallState::finalizePendingFutures(const RtCamera* pLastCamera) {
+  bool DrawCallState::finalizePendingFutures(const RtCamera* pLastCamera, LegacyManager& legacyManager) {
     ScopedCpuProfileZone();
     // Geometry hashes are vital, and cannot be disabled, so its important we get valid data (hence the return type)
     const bool valid = finalizeGeometryHashes();
@@ -56,29 +56,38 @@ namespace dxvk {
 
       // Skinning processing will be finalized here, if object requires skinning
       finalizeSkinningData(pLastCamera);
-      // MHFZ start : experiment auto sky and handle CustomBlend texture filter can only be applied to non fully opaque mesh
-      float extendSize = geometryData.boundingBox.getHalfSize();
 
-      if (geometryData.boundingBox.fullyOpaqueVertexColor && testCategoryFlags(InstanceCategories::CustomBlend)) {
+      // MHFZ start : retrieve legacy material layer
+      LegacyMaterialLayer* legacyMaterialLayer = materialData.getLegacyMaterialLayer();
+      LegacyMeshLayer* legacyMeshLayer = legacyManager.getLegacyMeshLayer(getGeometryData().getHashForRule<rules::TopologicalHash>());
+      if (legacyMeshLayer && legacyMeshLayer->overrideMaterial) {
+        legacyMaterialLayer = &legacyMeshLayer->materialLayer;
+      }
+      // MHFZ end
+
+      // MHFZ start : allow backface culling for geometry
+      if (legacyMeshLayer && legacyMeshLayer->testFeatures(LegacyMeshFeature::CustomBlend) == false && legacyMaterialLayer && legacyMaterialLayer->testFeatures(LegacyMaterialFeature::BackFaceCulling)) {
         materialData.alphaBlendEnabled = false;
         materialData.alphaTestEnabled = false;
 
         geometryData.cullMode = VK_CULL_MODE_FRONT_BIT;
         alphaBlendEnable = false;
       }
+      // MHFZ end
+
+      // MHFZ start : enable CustomBlend according to legacy material layer may need a clean
+      if (geometryData.boundingBox.canBeCustomBlend && legacyMeshLayer && legacyMeshLayer->testFeatures(LegacyMeshFeature::CustomBlend)) {
+        setCategory(InstanceCategories::CustomBlend, true);
+      }
+      // MHFZ end
 
       if (geometryData.boundingBox.canBeCustomBlend == false) {
         removeCategory(InstanceCategories::CustomBlend);
       }
 
-      if (extendSize > RtxOptions::skyBBoxExtendSizeMinimum() && extendSize > RtxOptions::Get()->getSkyExtendSize() && extendSize < RtxOptions::skyBBoxExtendSizeMaximum()) {
-        RtxOptions::Get()->setSkyExtendSize(extendSize);
-      }
-
-      bool maySky = extendSize >= RtxOptions::Get()->getSkyExtendSize();
-
       // Update any categories that require geometry hash
-      setupCategoriesForGeometry(maySky);
+      // MHFZ start : test if legacy materail layer is flagged as a sky
+      setupCategoriesForGeometry(legacyMaterialLayer ? legacyMaterialLayer->testFeatures(LegacyMaterialFeature::Sky) : false);
       // MHFZ end
 
       return true;

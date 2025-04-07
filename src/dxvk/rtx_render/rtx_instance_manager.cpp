@@ -401,7 +401,7 @@ namespace dxvk {
 
   RtInstance* InstanceManager::processSceneObject(
     const CameraManager& cameraManager, const RayPortalManager& rayPortalManager,
-    BlasEntry& blas, const DrawCallState& drawCall, const MaterialData& materialData, const RtSurfaceMaterial& material) {
+    BlasEntry& blas, const DrawCallState& drawCall, const MaterialData& materialData, RtSurfaceMaterial& material) {
 
     // If the RtInstance represents multiple instances, use the full transform of the first copy for the spatial map.
     // this prevents a bad de-duplication when the same replacement asset is used in multiple GeomPointInstancer prims.
@@ -420,7 +420,7 @@ namespace dxvk {
     return currentInstance;
   }
 
-  RtSurface::AlphaState InstanceManager::calculateAlphaState(const DrawCallState& drawCall, const MaterialData& materialData, const RtSurfaceMaterial& material) {
+  RtSurface::AlphaState InstanceManager::calculateAlphaState(const DrawCallState& drawCall, const MaterialData& materialData, RtSurfaceMaterial& material) {
     RtSurface::AlphaState out{};
 
     // Handle Alpha State for non-Opaque materials
@@ -607,6 +607,11 @@ namespace dxvk {
     out.isFullyOpaque = !blendEnabled && out.alphaTestType == AlphaTestType::kAlways; // use the blend/test type from the output, rather than legacy for this so replacements can override
     out.isBlendingDisabled = !blendEnabled;
 
+    // MHFZ start : adjust emissive here to take into account emissiveBlend
+    if (material.getType() == RtSurfaceMaterialType::Opaque) {
+      material.getOpaqueSurfaceMaterial().postCalculateBlendEmmisiveAdjust(out.emissiveBlend);
+    }
+    // MHFZ end
     return out;
   }
 
@@ -814,7 +819,7 @@ namespace dxvk {
                                        const BlasEntry& blas,
                                        const DrawCallState& drawCall,
                                        const MaterialData& materialData,
-                                       const RtSurfaceMaterial& material) {
+                                       RtSurfaceMaterial& material) {
     currentInstance.m_categoryFlags = drawCall.getCategoryFlags();
     currentInstance.surface.instancesToObject = drawCall.getTransformData().instancesToObject;
 

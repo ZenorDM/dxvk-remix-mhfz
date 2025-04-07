@@ -609,7 +609,37 @@ namespace dxvk {
     if (pReplacements != nullptr) {
       instanceId = drawReplacements(ctx, &input, pReplacements, overrideMaterialData);
     } else {
-      instanceId = processDrawCallState(ctx, input, overrideMaterialData);
+      // MHFZ start : add hide mesh features to by pass current mesh processDrawCallState add offset to world matrix
+      LegacyManager& legacyManager = m_device->getLegacyManager();
+      LegacyMeshLayer* legacyMeshLayer = legacyManager.getLegacyMeshLayer(input.getGeometryData().getHashForRule<rules::TopologicalHash>());
+      if (legacyMeshLayer && legacyMeshLayer->testFeatures(LegacyMeshFeature::HideMesh)) {
+        return;
+      }
+      if (legacyMeshLayer && legacyMeshLayer->offset != Vector3(0.0f)) {
+        static DrawCallState newDrawCallState;
+        newDrawCallState = input;
+        Matrix4& viewMatrix = newDrawCallState.transformData.worldToView;
+        newDrawCallState.transformData.objectToWorld[3] = newDrawCallState.transformData.objectToWorld[3] + Vector4(legacyMeshLayer->offset, 0);
+        newDrawCallState.transformData.objectToView = viewMatrix * newDrawCallState.transformData.objectToWorld;
+        instanceId = processDrawCallState(ctx, newDrawCallState, overrideMaterialData);
+      } else {
+      // MHFZ end
+        instanceId = processDrawCallState(ctx, input, overrideMaterialData);
+      }
+      // MHFZ start : if the mesh is a custom blend we can hide hole by render an opaque mesh with a hard alpha cut
+      if (input.testCategoryFlags(InstanceCategories::CustomBlend) && input.geometryData.boundingBox.canBeCustomBlend && legacyMeshLayer && legacyMeshLayer->testFeatures(LegacyMeshFeature::FillHole)) {
+        static DrawCallState newDrawCallState;
+        newDrawCallState = input;
+        newDrawCallState.removeCategory(InstanceCategories::CustomBlend);
+        
+        newDrawCallState.materialData.colorTextures[0] = {};
+        newDrawCallState.materialData.alphaTestReferenceValue = 250;
+
+        newDrawCallState.materialData.updateCachedHash();
+        processDrawCallState(ctx, newDrawCallState, nullptr);
+      }
+      // MHFZ end
+
     }
   }
 
@@ -912,7 +942,7 @@ namespace dxvk {
 
     // Note: Use either the specified override Material Data or the original draw calls state's Material Data to create a Surface Material if no override is specified
     const auto renderMaterialDataType = renderMaterialData.getType();
-    const RtSurfaceMaterial& surfaceMaterial = createSurfaceMaterial(ctx, renderMaterialData, drawCallState);
+    RtSurfaceMaterial& surfaceMaterial = createSurfaceMaterial(ctx, renderMaterialData, drawCallState);
     RtInstance* instance = m_instanceManager.processSceneObject(m_cameraManager, m_rayPortalManager, *pBlas, drawCallState, renderMaterialData, surfaceMaterial);
 
     // Check if a light should be created for this Material
@@ -935,6 +965,12 @@ namespace dxvk {
         if (h != kEmptyHash) {
           meta.legacyTextureHash2 = h;
         }
+        // MHFZ start : add legacy mesh hash to meta info
+        h = drawCallState.getGeometryData().getHashForRule<rules::TopologicalHash>();
+        if (h != kEmptyHash) {
+          meta.legacyMeshHash = h;
+        }
+        // MHFZ end
       }
 
       {
@@ -949,14 +985,17 @@ namespace dxvk {
     return instance ? instance->getId() : UINT64_MAX;
   }
 
-  const RtSurfaceMaterial& SceneManager::createSurfaceMaterial( Rc<DxvkContext> ctx, 
+  RtSurfaceMaterial& SceneManager::createSurfaceMaterial( Rc<DxvkContext> ctx, 
                                                                 const MaterialData& renderMaterialData,
                                                                 const DrawCallState& drawCallState,
                                                                 uint32_t* out_indexInCache) {
     ScopedCpuProfileZone();
     const bool hasTexcoords = drawCallState.hasTextureCoordinates();
     const auto renderMaterialDataType = renderMaterialData.getType();
-
+    // MHFZ start : get Legacy Manager
+    LegacyManager& legacyManager = m_device->getLegacyManager();
+    legacyManager.pushMeshMaterial(drawCallState.getGeometryData().getHashForRule<rules::TopologicalHash>());
+    // MHFZ end
     // We're going to use this to create a modified sampler for replacement textures.
     // Legacy and replacement materials should follow same filtering but due to lack of override capability per texture
     // legacy textures use original sampler to stay true to the original intent while replacements use more advanced filtering
@@ -1037,6 +1076,15 @@ namespace dxvk {
       float subsurfaceRadiusScale = 0.0f;
       float subsurfaceMaxSampleRadius = 0.0f;
 
+      // MHFZ start : init cutom material params
+      float normalIntensity = 1.0f;
+      float softBlendFactor = 1.0f;
+      float alphaBias = 1.0f;
+
+      bool normalizeVertexColor = true;
+      bool rejectDecal = false;
+      // MHFZ end
+
       constexpr Vector4 kWhiteModeAlbedo = Vector4(0.7f, 0.7f, 0.7f, 1.0f);
 
       if (renderMaterialDataType == MaterialDataType::Legacy) {
@@ -1056,15 +1104,39 @@ namespace dxvk {
         emissiveColorConstant = defaults.emissiveColorConstant();
         enableEmissive = defaults.enableEmissive();
 
+        // MHFZ start : retrieve legacy material layer to use
+        auto* legacyMaterialLayer = legacyMaterialData.materialLayer;
+        LegacyMeshLayer* legacyMeshLayer = legacyManager.getLegacyMeshLayer(drawCallState.getGeometryData().getHashForRule<rules::TopologicalHash>());
+        if (legacyMeshLayer && legacyMeshLayer->overrideMaterial) {
+          legacyMaterialLayer = &legacyMeshLayer->materialLayer;
+        }
+        // MHFZ end
+
         if (RtxOptions::Get()->getWhiteMaterialModeEnabled()) {
           albedoOpacityConstant = kWhiteModeAlbedo;
           metallicConstant = 0.f;
           roughnessConstant = 1.f;
         } else {
           if (defaults.useAlbedoTextureIfPresent()) {
+
+            // MHFZ start : test if we need to use material textures
+            bool upscaleAlbedoEnable;
+            bool normalEnable;
+            bool roughnessEnable;
+            bool metallicEnable;
+            bool heightEnable;
+
+            if (legacyMaterialLayer) {
+              upscaleAlbedoEnable = legacyMaterialLayer->testFeatures(LegacyMaterialFeature::Albedo);
+              normalEnable = legacyMaterialLayer->testFeatures(LegacyMaterialFeature::Normal);
+              roughnessEnable = legacyMaterialLayer->testFeatures(LegacyMaterialFeature::Roughness);
+              metallicEnable = legacyMaterialLayer->testFeatures(LegacyMaterialFeature::Metallic);
+              heightEnable = legacyMaterialLayer->testFeatures(LegacyMaterialFeature::Height);
+            }
+            // MHFZ end
             // NOTE: Do not patch original sampler to preserve filtering behavior of the legacy material
             // MHFZ start : legacy material texture 2 is the new albedo texture
-            if (legacyMaterialData.getColorTexture2().isValid() && !legacyMaterialData.getColorTexture2().isImageEmpty()) {      
+            if (legacyMaterialData.getColorTexture2().isValid() && !legacyMaterialData.getColorTexture2().isImageEmpty() && upscaleAlbedoEnable) {
               trackTexture(legacyMaterialData.getColorTexture2(), albedoOpacityTextureIndex, hasTexcoords);
             }
             // MHFZ end
@@ -1073,16 +1145,16 @@ namespace dxvk {
             }
 
             // MHFZ start : Bind legacy material custom texture
-            if (!legacyMaterialData.getNormalTexture().isImageEmpty() && legacyMaterialData.getNormalTexture().isValid()) {
+            if (!legacyMaterialData.getNormalTexture().isImageEmpty() && legacyMaterialData.getNormalTexture().isValid() && normalEnable) {
               trackTexture(legacyMaterialData.getNormalTexture(), normalTextureIndex, hasTexcoords);
             }
-            if (!legacyMaterialData.getRoughnessTexture().isImageEmpty() && legacyMaterialData.getRoughnessTexture().isValid()) {
+            if (!legacyMaterialData.getRoughnessTexture().isImageEmpty() && legacyMaterialData.getRoughnessTexture().isValid() && roughnessEnable) {
               trackTexture(legacyMaterialData.getRoughnessTexture(), roughnessTextureIndex, hasTexcoords);
             }
-            if (!legacyMaterialData.getMetallicTexture().isImageEmpty() && legacyMaterialData.getMetallicTexture().isValid()) {
+            if (!legacyMaterialData.getMetallicTexture().isImageEmpty() && legacyMaterialData.getMetallicTexture().isValid() && metallicEnable) {
               trackTexture(legacyMaterialData.getMetallicTexture(), metallicTextureIndex, hasTexcoords);
             }
-            if (!legacyMaterialData.getHeightTexture().isImageEmpty() && legacyMaterialData.getHeightTexture().isValid()) {
+            if (!legacyMaterialData.getHeightTexture().isImageEmpty() && legacyMaterialData.getHeightTexture().isValid() && heightEnable) {
               trackTexture(legacyMaterialData.getHeightTexture(), heightTextureIndex, hasTexcoords);
             }
             // MHFZ end
@@ -1092,11 +1164,33 @@ namespace dxvk {
         // MHFZ start : legacyMaterialData.d3dMaterial.Diffuse contain shader material emulation done on cpu
         albedoOpacityConstant = Vector4(legacyMaterialData.d3dMaterial.Diffuse.r, legacyMaterialData.d3dMaterial.Diffuse.g, legacyMaterialData.d3dMaterial.Diffuse.b, legacyMaterialData.d3dMaterial.Diffuse.a);
         // MHFZ end
+        // MHFZ start : if any legacy material layer gather all differents materials params
+        if (legacyMaterialLayer) {
+          softBlendFactor = legacyMaterialLayer->softBlendFactor;
+          normalIntensity = legacyMaterialLayer->normalStrenght;
+          emissiveIntensity = legacyMaterialLayer->emissiveIntensity;
+          roughnessConstant = legacyMaterialLayer->roughnessBias;
+          metallicConstant = legacyMaterialLayer->metallicBias;
+          if (legacyMaterialLayer->testFeatures(LegacyMaterialFeature::Emissive)) {
+            enableEmissive = true;
+            
+            emissiveColorConstant = Vector3(1.0f, 1.0f, 1.0f);
+          }
+          rejectDecal = legacyMaterialLayer->testFeatures(LegacyMaterialFeature::RejectDecal);
+          alphaBias = legacyMaterialLayer->alphaBias;
+        }
+
+        if (legacyMeshLayer) {
+          normalizeVertexColor = legacyMeshLayer->testFeatures(LegacyMeshFeature::NormalizeVertexColor);
+        }
+        // MHFZ end
 
          // MHFZ start : If custom legacy material got heighTexture we enable displacement need to have better in out value
         if (heightTextureIndex != kSurfaceMaterialInvalidTextureIndex) {
-          displaceIn = 1.0f;
-          displaceOut = 1.0f;
+          if (legacyMaterialLayer) {
+            displaceIn = legacyMaterialLayer->displacementFactor;
+            displaceOut = legacyMaterialLayer->displacementFactor;
+          }
           ++m_activePOMCount;
         }
         // MHFZ end
@@ -1117,6 +1211,55 @@ namespace dxvk {
         thinFilmEnable = defaults.enableThinFilm();
         alphaIsThinFilmThickness = defaults.alphaIsThinFilmThickness();
         thinFilmThicknessConstant = defaults.thinFilmThicknessConstant();
+        // MHFZ start : if legacyMaterialLayer we can use SSS and thin film with legacy
+        if (legacyMaterialLayer) {
+
+          thinFilmEnable = legacyMaterialLayer->thinFilmEnable;
+          alphaIsThinFilmThickness = legacyMaterialLayer->alphaIsThinFilmThickness;
+          thinFilmThicknessConstant = legacyMaterialLayer->thinFilmThicknessConstant;
+          subsurfaceMeasurementDistance = legacyMaterialLayer->subsurfaceMeasurementDistance * RtxOptions::SubsurfaceScattering::surfaceThicknessScale();
+
+          const bool isSubsurfaceScatteringDiffusionProfile = legacyMaterialLayer->isSubsurfaceDiffusionProfile;
+
+         
+          if ((RtxOptions::SubsurfaceScattering::enableThinOpaque() && subsurfaceMeasurementDistance > 0.0f) ||
+            (RtxOptions::SubsurfaceScattering::enableDiffusionProfile() && isSubsurfaceScatteringDiffusionProfile)) {
+
+            subsurfaceTransmittanceColor = legacyMaterialLayer->subsurfaceTransmittanceColor;
+            subsurfaceVolumetricAnisotropy = legacyMaterialLayer->subsurfaceVolumetricAnisotropy;
+
+            if (isSubsurfaceScatteringDiffusionProfile){
+              subsurfaceSingleScatteringAlbedo = legacyMaterialLayer->subsurfaceRadius;
+              subsurfaceMaxSampleRadius = std::max(0.F, legacyMaterialLayer->subsurfaceMaxSampleRadius);
+              subsurfaceRadiusScale = std::max(legacyMaterialLayer->subsurfaceRadiusScale, 1e-5f);
+              assert(subsurfaceRadiusScale > 0);
+            }
+            else {
+              assert(subsurfaceMeasurementDistance > 0);
+
+              subsurfaceSingleScatteringAlbedo = legacyMaterialLayer->subsurfaceSingleScatteringAlbedo;
+              subsurfaceMaxSampleRadius = 0;
+              subsurfaceRadiusScale = -1;
+              assert(subsurfaceRadiusScale < 0);  // if < 0, then shaders assume that
+              // this material is not SubsurfaceScatter, but just SingleScatter
+              // same here, but <0.F
+            }
+
+            const auto subsurfaceMaterial = RtSubsurfaceMaterial {
+              subsurfaceTransmittanceTextureIndex,
+              subsurfaceThicknessTextureIndex,
+              subsurfaceSingleScatteringAlbedoTextureIndex,
+              subsurfaceTransmittanceColor,
+              subsurfaceMeasurementDistance,
+              subsurfaceSingleScatteringAlbedo,
+              subsurfaceVolumetricAnisotropy,
+              subsurfaceRadiusScale,
+              subsurfaceMaxSampleRadius,
+            };
+            subsurfaceMaterialIndex = m_surfaceMaterialExtensionCache.track(subsurfaceMaterial);
+          }
+        }
+        // MHFZ end
       } else if (renderMaterialDataType == MaterialDataType::Opaque) {
         const auto& opaqueMaterialData = renderMaterialData.getOpaqueMaterialData();
 
@@ -1222,7 +1365,7 @@ namespace dxvk {
         ignoreAlphaChannel, thinFilmEnable, alphaIsThinFilmThickness,
         thinFilmThicknessConstant, samplerIndex, displaceIn, displaceOut, 
         subsurfaceMaterialIndex, isUsingRaytracedRenderTarget,
-        samplerFeedbackStamp,
+        samplerFeedbackStamp, normalIntensity, softBlendFactor, normalizeVertexColor, rejectDecal, alphaBias
       };
 
       if (opaqueSurfaceMaterial.hasValidDisplacement()) {
@@ -1293,21 +1436,22 @@ namespace dxvk {
     return m_surfaceMaterialCache.at(index);
   }
 
-  std::optional<XXH64_hash_t> SceneManager::findLegacyTextureHashByObjectPickingValue(uint32_t objectPickingValue) {
+  // MHFZ start :  picking callback send legacy mesh hash save in the meta info
+  std::optional<std::pair<XXH64_hash_t, XXH64_hash_t>> SceneManager::findLegacyTextureHashByObjectPickingValue(uint32_t objectPickingValue) {
     std::lock_guard lock { m_drawCallMeta.mutex };
 
     auto tryFindIn = [](const std::unordered_map<ObjectPickingValue, DrawCallMetaInfo>& table, ObjectPickingValue toFind)
-      -> std::optional<XXH64_hash_t> {
+      -> std::optional<std::pair<XXH64_hash_t, XXH64_hash_t>> {
       auto found = table.find(toFind);
       if (found != table.end()) {
         const DrawCallMetaInfo& meta = found->second;
         if (meta.legacyTextureHash != kEmptyHash) {
-          return meta.legacyTextureHash;
+          return std::make_pair(meta.legacyTextureHash, meta.legacyMeshHash);
         }
       }
       return std::nullopt;
     };
-
+  // MHFZ end
     const int ticksToCheck[] = {
       m_drawCallMeta.ticker, // current tick
       (m_drawCallMeta.ticker + m_drawCallMeta.MaxTicks - 1) % m_drawCallMeta.MaxTicks, // prev tick

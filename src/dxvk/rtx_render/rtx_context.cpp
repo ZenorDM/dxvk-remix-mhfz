@@ -811,7 +811,9 @@ namespace dxvk {
         : nullptr;
 
     // Sync any pending work with geometry processing threads
-    if (drawCallState.finalizePendingFutures(lastCamera)) {
+    // MHFZ start
+    if (drawCallState.finalizePendingFutures(lastCamera, m_device->getLegacyManager())) {
+    // MHFZ end
       drawCallState.cameraType = cameraManager.processCameraData(drawCallState);
 
       if (drawCallState.cameraType == CameraType::Unknown) {
@@ -1927,7 +1929,9 @@ namespace dxvk {
 
             auto legacyHashForPrimaryValue = g_allowMappingLegacyHashToObjectPickingValue ?
               m_common->getSceneManager().findLegacyTextureHashByObjectPickingValue(primaryValue) :
-              std::optional<XXH64_hash_t>{};
+              // MHFZ start
+              std::optional<std::pair<XXH64_hash_t, XXH64_hash_t>>{};
+              // MHFZ end
 
             cCallback(std::move(values), legacyHashForPrimaryValue);
           }
@@ -2130,36 +2134,36 @@ namespace dxvk {
       setViewports(1, &viewport, &scissor);
     }
 
-    if (drawCallState.usesVertexShader) {
-      D3D9RtxVertexCaptureData modified = prevCB.programmablePipeline;
-      {
-        // Jittered clip space for DLSS
-        // Note: we can't jitter the projection matrix, as a game might calculate
-        // its gl_Position by different methods (e.g. without projection matrix at all);
-        // so apply jitter directly on gl_Position
-        float ratioX = Sign(drawCallState.getTransformData().viewToProjection[2][3]);
-        float ratioY = -Sign(drawCallState.getTransformData().viewToProjection[2][3]);
-        Vector2 clipSpaceJitter = RtCamera::calcClipSpaceJitter(RtCamera::calcPixelJitter(m_device->getCurrentFrameId()),
-                                                                renderResolution[0], renderResolution[1],
-                                                                ratioX, ratioY);
-        modified.jitterX = clipSpaceJitter.x;
-        modified.jitterY = clipSpaceJitter.y;
+      if (drawCallState.usesVertexShader) {
+        D3D9RtxVertexCaptureData modified = prevCB.programmablePipeline;
+        {
+          // Jittered clip space for DLSS
+          // Note: we can't jitter the projection matrix, as a game might calculate
+          // its gl_Position by different methods (e.g. without projection matrix at all);
+          // so apply jitter directly on gl_Position
+          float ratioX = Sign(drawCallState.getTransformData().viewToProjection[2][3]);
+          float ratioY = -Sign(drawCallState.getTransformData().viewToProjection[2][3]);
+          Vector2 clipSpaceJitter = RtCamera::calcClipSpaceJitter(RtCamera::calcPixelJitter(m_device->getCurrentFrameId()),
+                                                                  renderResolution[0], renderResolution[1],
+                                                                  ratioX, ratioY);
+          modified.jitterX = clipSpaceJitter.x;
+          modified.jitterY = clipSpaceJitter.y;
+        }
+        // Ensure that memcpy can be used for fewer memory interactions
+        static_assert(std::is_trivially_copyable_v<D3D9RtxVertexCaptureData>);
+        allocAndMapVertexCaptureConstantBuffer() = modified;
+      } else {
+        D3D9FixedFunctionVS modified = prevCB.fixedFunction;
+        {
+          // Jittered projection for DLSS
+          RtCamera::applyJitterTo(modified.Projection,
+                                  m_device->getCurrentFrameId(),
+                                  renderResolution[0], renderResolution[1]);
+        }
+        // Ensure that memcpy can be used for fewer memory interactions
+        static_assert(std::is_trivially_copyable_v<D3D9FixedFunctionVS>);
+        allocAndMapFixedFunctionVSConstantBuffer() = modified;
       }
-      // Ensure that memcpy can be used for fewer memory interactions
-      static_assert(std::is_trivially_copyable_v<D3D9RtxVertexCaptureData>);
-      allocAndMapVertexCaptureConstantBuffer() = modified;
-    } else {
-      D3D9FixedFunctionVS modified = prevCB.fixedFunction;
-      {
-        // Jittered projection for DLSS
-        RtCamera::applyJitterTo(modified.Projection,
-                                m_device->getCurrentFrameId(), 
-                                renderResolution[0], renderResolution[1]);
-      }
-      // Ensure that memcpy can be used for fewer memory interactions
-      static_assert(std::is_trivially_copyable_v<D3D9FixedFunctionVS>);
-      allocAndMapFixedFunctionVSConstantBuffer() = modified;
-    }
 
     DxvkRenderTargets skyRt;
     skyRt.color[0].view = getResourceManager().getCompatibleViewForView(skyMatteView, m_skyRtColorFormat);

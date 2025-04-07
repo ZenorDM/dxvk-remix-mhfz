@@ -644,8 +644,10 @@ namespace dxvk {
     if (IsRenderTarget()) {
       // Assumption: All image hashes are created before creating sample view. Put assert here to track hash bugs.
       assert(m_image->getHash() != kEmptyHash);
-      ImGUI::AddTexture(m_image->getHash(), m_sampleView.Color, ImGUI::kTextureFlagsDefault);
-      ImGUI::AddTexture(m_image->getDescriptorHash(), m_sampleView.Color, ImGUI::kTextureFlagsRenderTarget);
+      // MHFZ start
+      ImGUI::AddTexture(m_image->getHash(), m_sampleView.Color, ImGUI::kTextureFlagsDefault, nullptr);
+      ImGUI::AddTexture(m_image->getDescriptorHash(), m_sampleView.Color, ImGUI::kTextureFlagsRenderTarget, nullptr);
+      // MHFZ end
     }
   }
 
@@ -686,13 +688,19 @@ namespace dxvk {
     m_image->setHash(imageHash);
 
     // Let ImGUI know about this texture
-    ImGUI::AddTexture(imageHash, m_sampleView.Color, ImGUI::kTextureFlagsDefault);
+    // MHFZ start : gather original crc 32 hash from D3D9 common texture and send it to ImGui
+    uint32_t hash = m_device->GetLegacyManager().getTextureHash(this);
+    uint32_t origin = m_device->GetLegacyManager().getTextureOrigin(this);
+    LegacyMaterialLayer* legacyMaterialLayer = m_device->GetLegacyManager().getLegacyMaterialLayer(this);
+    ImGUI::AddTexture(imageHash, m_sampleView.Color, ImGUI::kTextureFlagsDefault, legacyMaterialLayer, hash, origin);
+    // MHFZ end
     if (IsRenderTarget()) {
       // Generate descriptor hash from the image properties (not including actual pixel data)
       XXH64_hash_t descriptorHash = m_desc.CalculateHash();
       m_image->setDescriptorHash(descriptorHash);
-
-      ImGUI::AddTexture(descriptorHash, m_sampleView.Color, ImGUI::kTextureFlagsRenderTarget);
+      // MHFZ start
+      ImGUI::AddTexture(descriptorHash, m_sampleView.Color, ImGUI::kTextureFlagsRenderTarget, nullptr);
+      // MHFZ end
     }
   }
 

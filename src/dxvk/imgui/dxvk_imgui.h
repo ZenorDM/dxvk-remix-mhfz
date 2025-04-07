@@ -47,7 +47,9 @@ namespace dxvk {
   class ImGuiCapture;
   class DxvkDevice;
   class DxvkContext;
-
+  // MHFZ start : required forward declaration
+  struct LegacyMaterialLayer;
+  // MHFZ end
   /**
    * \brief DXVK ImGUI
    * 
@@ -93,7 +95,9 @@ namespace dxvk {
             VkExtent2D         surfaceSize,
             bool               vsync);
     
-    static void AddTexture(const XXH64_hash_t hash, const Rc<DxvkImageView>& imageView, uint32_t textureFeatureFlags);
+    // MHFZ start
+    static void AddTexture(const XXH64_hash_t hash, const Rc<DxvkImageView>& imageView, uint32_t textureFeatureFlags, LegacyMaterialLayer* legacyMaterialLayer, uint32_t baseHash = 0, uint32_t origin = 0);
+    // MHFZ end
     static void ReleaseTexture(const XXH64_hash_t hash);
     static bool checkHotkeyState(const VirtualKeys& virtKeys, const bool allowContinuousPress = false);
     static void SetFogStates(const fast_unordered_cache<FogState>& fogStates, XXH64_hash_t usedFogHash);

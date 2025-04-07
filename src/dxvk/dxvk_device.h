@@ -47,7 +47,10 @@
 #include "../vulkan/vulkan_presenter.h"
 
 #include "../tracy/TracyVulkan.hpp"
+// MHFZ start: required include
 #include "../d3d9/d3d9_shaders_hasher.h"
+#include "rtx_render/rtx_legacy_manager.h"
+// MHFZ end
 
 namespace dxvk {
   
@@ -635,10 +638,15 @@ namespace dxvk {
     }
     // NV-DXVK end
 
+    // MHFZ start : manager getters
     ShadersHasher& getShaderHasher() {
       return m_shaderHasher;
     }
 
+    LegacyManager& getLegacyManager() {
+      return m_legacyManager;
+    }
+    // MHFZ end
 
   private:
     
@@ -678,8 +686,10 @@ namespace dxvk {
             uint32_t                family,
             uint32_t                index) const;
 
+    // MHFZ start : cutom managers
     ShadersHasher   m_shaderHasher;
-    
+    LegacyManager                   m_legacyManager;
+    // MHFZ end
   };
   
 }

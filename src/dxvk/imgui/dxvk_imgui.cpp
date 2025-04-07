@@ -46,6 +46,9 @@
 #include "rtx_render/rtx_neural_radiance_cache.h"
 #include "rtx_render/rtx_rtxdi_rayquery.h"
 #include "rtx_render/rtx_restir_gi_rayquery.h"
+// MHFZ start : required include
+#include "rtx_render/rtx_legacy_manager.h"
+// MHFZ end
 #include "dxvk_image.h"
 #include "../util/rc/util_rc_ptr.h"
 #include "../util/util_math.h"
@@ -142,6 +145,11 @@ namespace dxvk {
   struct ImGuiTexture {
     Rc<DxvkImageView> imageView = VK_NULL_HANDLE;
     VkDescriptorSet texID = VK_NULL_HANDLE;
+    // MHFZ start : save legacy texture origin and crc 32 hash and material layer
+    LegacyMaterialLayer* legacyMaterialLayer;
+    TextureOrigin origin = TextureOrigin::None;
+    uint32_t originalHash = 0;
+    // MHFZ end
     uint32_t textureFeatureFlags = 0;
   };
   std::unordered_map<XXH64_hash_t, ImGuiTexture> g_imguiTextureMap;
@@ -531,11 +539,18 @@ namespace dxvk {
     ImGui::DestroyContext(m_context);
   }
   
-  void ImGUI::AddTexture(const XXH64_hash_t hash, const Rc<DxvkImageView>& imageView, uint32_t textureFeatureFlags) {
+  // MHFZ start : pass legacy texture informations and material layer
+  void ImGUI::AddTexture(const XXH64_hash_t hash, const Rc<DxvkImageView>& imageView, uint32_t textureFeatureFlags, LegacyMaterialLayer* legacyMaterialLayer, uint32_t baseHash, uint32_t origin) {
+  // MHFZ end
     if (g_imguiTextureMap.find(hash) == g_imguiTextureMap.end()) {
       ImGuiTexture texture;
       texture.imageView = imageView; // Hold a refcount
       texture.texID = VK_NULL_HANDLE;
+      // MHFZ start
+      texture.legacyMaterialLayer = legacyMaterialLayer;
+      texture.origin = (TextureOrigin)origin;
+      texture.originalHash = baseHash;
+      // MHFZ end
       texture.textureFeatureFlags = textureFeatureFlags;
       g_imguiTextureMap[hash] = texture;
     }
@@ -1758,7 +1773,10 @@ namespace dxvk {
       str << (isRT ? "Render Target " : "Texture ") << imageInfo.extent.width << 'x' << imageInfo.extent.height << '\n';
       str << formatName << '\n';
       str << "Hash: " << hashToString(texHash) << '\n';
-      
+      // MHFZ start : print original crc 32 texture hash
+      str << "Base game crc32 hash: " << std::hex << iter->second.originalHash << '\n';
+      // MHFZ end
+
       return str.str();
     }
 
@@ -1804,6 +1822,9 @@ namespace dxvk {
       // need to keep a reference to a texture that was passed to 'open()',
       // as 'open()' is called only once, but popup needs to reference that texture throughout open-close
       std::atomic<XXH64_hash_t> g_holdingTexture {};
+      // MHFZ start :  keep reference to mesh hash to retrieve is material layer from legacy manager
+      std::atomic<XXH64_hash_t> g_holdingMesh {};
+      // MHFZ end
       bool g_openWhenAvailable {};
 
       void openImguiPopupOrToogle() {
@@ -1854,6 +1875,9 @@ namespace dxvk {
         
         if (ImGui::BeginPopup(POPUP_NAME)) {
           const XXH64_hash_t texHash = g_holdingTexture.load();
+          // MHFZ start
+          const XXH64_hash_t meshHash = g_holdingMesh.load();
+          // MHFZ end
           if (texHash != kEmptyHash) {
             ImGui::Text("Texture Info:\n%s", makeTextureInfo(texHash, isMaterialReplacement(sceneMgr, texHash)).c_str());
             if (ImGui::Button("Copy Texture hash##texture_popup")) {
@@ -1863,7 +1887,148 @@ namespace dxvk {
             const auto& pair = g_imguiTextureMap.find(texHash);
             if (pair != g_imguiTextureMap.end()) {
               textureFeatureFlags = pair->second.textureFeatureFlags;
+              // MHFZ start : cutom editor for legacy material and mesh layer
+              if (ImGui::Button("Copy Base Texture hash##texture_popup")) {
+                std::stringstream ss;
+                ss << std::hex << pair->second.originalHash;
+                ImGui::SetClipboardText(ss.str().c_str());
+              }
+              if (ImGui::Button("Save All")) {
+                DxvkDevice* device = sceneMgr.device();
+                LegacyManager& legacyManager = device->getLegacyManager();
+                legacyManager.save();
+              }
+              ImGui::SameLine();
+              if (ImGui::Button("Reload save")) {
+                DxvkDevice* device = sceneMgr.device();
+                LegacyManager& legacyManager = device->getLegacyManager();
+                legacyManager.load();
+              }
+              auto drawMaterialOptions = [&](LegacyMaterialLayer* legacyMaterialLayer) {
+                static LegacyMaterialLayer materiaLayerCopy;
+                if (ImGui::Button("Reset Layer")) {
+                  legacyMaterialLayer->resetLayerMaterial();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Copy")) {
+                  materiaLayerCopy = *legacyMaterialLayer;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Paste")) {
+                  *legacyMaterialLayer = materiaLayerCopy;
+                }
+
+                if (ImGui::TreeNode("Features support")) {
+
+                  auto drawFeature = [&legacyMaterialLayer](const char* str, LegacyMaterialFeature feature) {
+                    bool featureState = legacyMaterialLayer->testFeatures(feature);
+                    ImGui::Checkbox(str, &featureState);
+                    if (featureState) {
+                      legacyMaterialLayer->features |= feature;
+                    } 
+                    else {
+                      legacyMaterialLayer->features &= ~feature;
+                    }
+                  };
+
+                  drawFeature("Albedo", LegacyMaterialFeature::Albedo);
+                  drawFeature("Normal", LegacyMaterialFeature::Normal);
+                  drawFeature("Roughness", LegacyMaterialFeature::Roughness);
+                  drawFeature("Metallic", LegacyMaterialFeature::Metallic);
+                  drawFeature("Height", LegacyMaterialFeature::Height);
+                  drawFeature("Emissive", LegacyMaterialFeature::Emissive);
+                  drawFeature("Sky", LegacyMaterialFeature::Sky);
+                  drawFeature("RejectDecal", LegacyMaterialFeature::RejectDecal);
+                  drawFeature("BackFaceCulling", LegacyMaterialFeature::BackFaceCulling);
+
+                  ImGui::TreePop();
+                }
+
+
+                ImGui::SliderInt("Alpha test reference value", &legacyMaterialLayer->alphaTestReferenceValue, 0, 255, "%d", ImGuiSliderFlags_AlwaysClamp);
+
+                ImGui::SliderFloat("Metallic Bias", &legacyMaterialLayer->metallicBias, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                ImGui::SliderFloat("Roughness Bias", &legacyMaterialLayer->roughnessBias, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+                ImGui::SliderFloat("Emissive Intensity", &legacyMaterialLayer->emissiveIntensity, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+                ImGui::SliderFloat("Normal Strength", &legacyMaterialLayer->normalStrenght, -10.0f, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                ImGui::SliderFloat("Soft blend factor", &legacyMaterialLayer->softBlendFactor, 0.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                ImGui::SliderFloat("Alpha bias", &legacyMaterialLayer->alphaBias, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+                if (ImGui::TreeNode("Displacement params")) {
+                  ImGui::SliderFloat("Displacement factor", &legacyMaterialLayer->displacementFactor, -10.0f, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                  ImGui::TreePop();
+                }
+
+                if (ImGui::TreeNode("Subsurface params")) {
+                  ImGui::Checkbox("Subsurface diffusion profile", &legacyMaterialLayer->isSubsurfaceDiffusionProfile);
+                  ImGui::SliderFloat("Subsurface Measurement Distance", &legacyMaterialLayer->subsurfaceMeasurementDistance, 0.0f, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                  ImGui::SliderFloat3("Subsurface Transmitance Color", legacyMaterialLayer->subsurfaceTransmittanceColor.data, 0.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                  ImGui::SliderFloat("Subsurface Volumetric Anisotropy", &legacyMaterialLayer->subsurfaceVolumetricAnisotropy, 0.0f, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                  ImGui::SliderFloat3("Subsurface Scattering Albedo", legacyMaterialLayer->subsurfaceSingleScatteringAlbedo.data, 0.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                  ImGui::SliderFloat3("Subsurface Scattering Radius", legacyMaterialLayer->subsurfaceRadius.data, 0.0f, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                  ImGui::SliderFloat("Subsurface Max Sample Radius", &legacyMaterialLayer->subsurfaceMaxSampleRadius, 0.0f, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                  ImGui::TreePop();
+                }
+                if (ImGui::TreeNode("Thin film params")) {
+                  ImGui::Checkbox("Thin film", &legacyMaterialLayer->thinFilmEnable);
+                  ImGui::Checkbox("Alpha is thin film", &legacyMaterialLayer->alphaIsThinFilmThickness);
+                  ImGui::SliderFloat("Thin film thickness constant", &legacyMaterialLayer->thinFilmThicknessConstant, 0.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                  ImGui::TreePop();
+                }
+              };
+
+              if (ImGui::TreeNode("Legacy Material Layer")) {
+                LegacyMaterialLayer* legacyMaterialLayer = pair->second.legacyMaterialLayer;
+                if (legacyMaterialLayer) {
+                  drawMaterialOptions(legacyMaterialLayer);
+                }
+                ImGui::TreePop();
+              }
+
+              if (ImGui::TreeNode("Mesh Material Layer")) {
+                DxvkDevice* device = sceneMgr.device();
+                LegacyManager& legacyManager = device->getLegacyManager();
+                LegacyMeshLayer* legacyMeshLayer = legacyManager.getLegacyMeshLayer(meshHash);
+
+                if (legacyMeshLayer){
+
+                  bool overrideMaterial = legacyMeshLayer->overrideMaterial;
+
+                  if (ImGui::Checkbox("Override material", &legacyMeshLayer->overrideMaterial)) {
+                    legacyMeshLayer->materialLayer = *pair->second.legacyMaterialLayer;
+                  }
+                  if (legacyMeshLayer->overrideMaterial) {
+                    LegacyMaterialLayer* legacyMaterialLayer = &legacyMeshLayer->materialLayer;
+                    drawMaterialOptions(legacyMaterialLayer);
+                  }
+
+                  ImGui::SliderFloat3("World position offset", legacyMeshLayer->offset.data, -40.0f, 40.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+                  auto drawFeature = [&legacyMeshLayer](const char* str, LegacyMeshFeature feature) {
+                    bool featureState = legacyMeshLayer->testFeatures(feature);
+                    ImGui::Checkbox(str, &featureState);
+                    if (featureState) {
+                      legacyMeshLayer->features |= feature;
+                    } else {
+                      legacyMeshLayer->features &= ~feature;
+                    }
+                    };
+
+                  if (ImGui::TreeNode("Mesh Features")) {
+                    drawFeature("CustomBlend", LegacyMeshFeature::CustomBlend);
+                    drawFeature("FillHole", LegacyMeshFeature::FillHole);
+                    drawFeature("HideMesh", LegacyMeshFeature::HideMesh);
+                    drawFeature("NormalizeVertexColor", LegacyMeshFeature::NormalizeVertexColor);
+                    ImGui::TreePop();
+                  }
+                }
+                ImGui::TreePop();
+              }
+              // MHFZ end
             }
+
             for (auto& rtxOption : rtxTextureOptions) {
               rtxOption.bufferToggle = rtxOption.textureSetOption->getValue().count(texHash) > 0;
               if ((rtxOption.featureFlagMask & textureFeatureFlags) != rtxOption.featureFlagMask) {
@@ -1882,6 +2047,9 @@ namespace dxvk {
         } else {
           // popup is closed, forget texture
           g_holdingTexture.exchange(kEmptyHash);
+          // MHFZ start
+          g_holdingMesh.exchange(kEmptyHash);
+          // MHFZ end
           return {};
         }
       }
@@ -1924,6 +2092,11 @@ namespace dxvk {
     }
 
     constexpr const char* Uncategorized = "_nocategory";
+    // MHFZ start : custom mhfz texture category gather from origin path
+    constexpr const char* Stage = "stage";
+    constexpr const char* Emmodel = "emmodel";
+    constexpr const char* Extend = "extend";
+    // MHFZ end
   } // anonymous namespace
 
   void ImGUI::showTextureSelectionGrid(const Rc<DxvkContext>& ctx, const char* uniqueId, const uint32_t texturesPerRow, const float thumbnailSize, const float minChildHeight) {
@@ -1945,6 +2118,12 @@ namespace dxvk {
         break;
       }
     }
+
+    // MHFZ start : filter texture by is origin
+    bool isStageFiltered = std::string_view { uniqueId } == Stage;
+    bool isEmmodelFiltered = std::string_view { uniqueId } == Emmodel;
+    bool isExtendFiltered = std::string_view { uniqueId } == Extend;
+    // MHFZ end
 
     const ImVec2 availableSize = ImGui::GetContentRegionAvail();
     const float childWindowHeight = minChildHeight <= 600.0f ? minChildHeight
@@ -1972,23 +2151,48 @@ namespace dxvk {
           continue;
         }
       } else {
-        for (const auto rtxOption : rtxTextureOptions) {
-          auto& textureSet = rtxOption.textureSetOption->getValue();
-          textureHasSelection = textureSet.find(texHash) != textureSet.end();
-          if (textureHasSelection) {
-            break;
+        // MHFZ start
+        if (isStageFiltered) {
+          if (texImgui.origin != TextureOrigin::Stage) {
+            continue;
+          }
+        }
+        else if (isEmmodelFiltered) {
+          if (texImgui.origin != TextureOrigin::Emmodel) {
+            continue;
+          }
+        }
+        else if (isExtendFiltered) {
+          if (texImgui.origin != TextureOrigin::Extend) {
+            continue;
+          }
+        }
+        else {
+        // MHFZ end
+          for (const auto rtxOption : rtxTextureOptions) {
+            auto& textureSet = rtxOption.textureSetOption->getValue();
+            textureHasSelection = textureSet.find(texHash) != textureSet.end();
+            if (textureHasSelection) {
+              break;
+            }
           }
         }
       }
 
-      if (legacyTextureGuiShowAssignedOnly()) {
-        if (std::string_view { uniqueId } == Uncategorized) {
-          if (textureHasSelection) {
-            continue; // Currently handling the uncategorized texture tab and current texture is assigned to a category -> skip
-          }
-        } else {
-          if (!textureHasSelection) {
-            continue; // Texture is not assigned to this category -> skip
+      // MHFZ start
+      if (!isStageFiltered && !isEmmodelFiltered && !isExtendFiltered) {
+      // MHFZ end
+        if (legacyTextureGuiShowAssignedOnly()) {
+          if (std::string_view { uniqueId } == Uncategorized) {
+            // MHFZ start
+            if (textureHasSelection || texImgui.origin == TextureOrigin::Stage || texImgui.origin == TextureOrigin::Emmodel || texImgui.origin == TextureOrigin::Extend) {
+            // MHFZ end
+              continue; // Currently handling the uncategorized texture tab and current texture is assigned to a category -> skip
+            }
+          } else {
+            if (!textureHasSelection) {
+              continue; // Texture is not assigned to this category -> skip
+            }
           }
         }
       }
@@ -2112,12 +2316,25 @@ namespace dxvk {
           tovec2i(ImGui::GetMousePos()) + Vector2i { 1, 1 },
 
           // and callback on result:
-          [](std::vector<ObjectPickingValue>&& objectPickingValues, std::optional<XXH64_hash_t> legacyTextureHash) {
+          // MHFZ start : picking callback also retrieve mesh hash
+          [](std::vector<ObjectPickingValue>&& objectPickingValues, std::optional<std::pair<XXH64_hash_t, XXH64_hash_t>> legacyHash) {
+          // MHFZ end
             // assert(legacyTextureHash);
             // found asynchronously the legacy texture hash, place it into texture_popup; so we would highlight it
-            texture_popup::g_holdingTexture.exchange(legacyTextureHash.value_or(kEmptyHash));
-            // move UI menu focus
-            g_jumpto.exchange(legacyTextureHash.value_or(kEmptyHash));
+            // MHFZ start :
+            if (legacyHash.has_value()) {
+              texture_popup::g_holdingTexture.exchange(legacyHash.value().first);
+              texture_popup::g_holdingMesh.exchange(legacyHash.value().second);
+              // move UI menu focus
+              g_jumpto.exchange(legacyHash.value().first);
+            }
+            else {
+              texture_popup::g_holdingTexture.exchange(kEmptyHash);
+              texture_popup::g_holdingMesh.exchange(kEmptyHash);
+              // move UI menu focus
+              g_jumpto.exchange(kEmptyHash);
+            }
+            // MHFZ end
           });
       }
 
@@ -2204,6 +2421,12 @@ namespace dxvk {
         return HeightLimit;
       }
 
+      // MHFZ start : filter texture by is origin
+      bool isStageFiltered = std::string_view { uniqueId } == Stage;
+      bool isEmmodelFiltered = std::string_view { uniqueId } == Emmodel;
+      bool isExtendFiltered = std::string_view { uniqueId } == Extend;
+      // MHFZ end
+
       const fast_unordered_set* selected = nullptr;
       if (onlySelected) {
         const auto found = std::find_if(rtxTextureOptions.begin(), rtxTextureOptions.end(),
@@ -2220,7 +2443,24 @@ namespace dxvk {
       float height = -1;
       uint32_t textureCount = 0;
       for (const auto& [texHash, texImgui] : g_imguiTextureMap) {
-        if (selected) {
+        // MHFZ start :
+        if (isStageFiltered){
+          if (texImgui.origin != TextureOrigin::Stage) {
+            continue;
+          }
+        }
+        else if (isEmmodelFiltered) {
+          if (texImgui.origin != TextureOrigin::Emmodel) {
+            continue;
+          }
+        } 
+        else if (isExtendFiltered) {
+          if (texImgui.origin != TextureOrigin::Extend) {
+            continue;
+          }
+        }
+        else if (selected) {
+        // MHFZ end
           if (selected->find(texHash) == selected->end()) {
             continue;
           }
@@ -2395,7 +2635,9 @@ namespace dxvk {
       } else {
 
         auto showLegacyGui = [&](const char* uniqueId, const char* displayName, const char* description) {
-          const bool countOnlySelected = legacyTextureGuiShowAssignedOnly() && !(strcmp(uniqueId, Uncategorized) == 0);
+          // MHFZ start
+          const bool countOnlySelected = legacyTextureGuiShowAssignedOnly() && !(strcmp(uniqueId, Uncategorized) == 0) && !(strcmp(uniqueId, Stage) == 0) && !(strcmp(uniqueId, Emmodel) == 0) && !(strcmp(uniqueId, Extend) == 0);
+          // MHFZ end
           const auto height = calculateTextureCategoryHeight(countOnlySelected, uniqueId, numThumbnailsPerRow, thumbnailSize);
           if (!height.has_value()) {
             ImGui::BeginDisabled(true);
@@ -2426,6 +2668,11 @@ namespace dxvk {
 
         if (legacyTextureGuiShowAssignedOnly()) {
           showLegacyGui(Uncategorized, "Uncategorized", "Textures that are not assigned to any category");
+          // MHFZ start
+          showLegacyGui(Stage, "Stage", "Textures that are under stage folder");
+          showLegacyGui(Emmodel, "Emmodel", "Textures that are under emmodel folder");
+          showLegacyGui(Extend, "Extend", "Textures that are under extend folder");
+          // MHFZ end
           spacing();
         }
         for (const RtxTextureOption& category : rtxTextureOptions) {

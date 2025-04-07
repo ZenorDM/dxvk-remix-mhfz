@@ -206,8 +206,9 @@ public:
                     bool async = true,
                     uint16_t samplerFeedbackStamp = SAMPLER_FEEDBACK_INVALID);
   [[nodiscard]] SamplerIndex trackSampler(Rc<DxvkSampler> sampler);
-
-  std::optional<XXH64_hash_t> findLegacyTextureHashByObjectPickingValue(uint32_t objectPickingValue);
+  // MHFZ start : picking also send legacy mesh hash
+  std::optional<std::pair<XXH64_hash_t, XXH64_hash_t>> findLegacyTextureHashByObjectPickingValue(uint32_t objectPickingValue);
+  // MHFZ end
   std::vector<ObjectPickingValue> gatherObjectPickingValuesByTextureHash(XXH64_hash_t texHash);
 
   Rc<DxvkSampler> patchSampler( const VkFilter filterMode,
@@ -235,7 +236,7 @@ private:
   // Consumes a draw call state and updates the scene state accordingly
   uint64_t processDrawCallState(Rc<DxvkContext> ctx, const DrawCallState& blasInput, const MaterialData* replacementMaterialData);
 
-  const RtSurfaceMaterial& createSurfaceMaterial( Rc<DxvkContext> ctx, 
+  RtSurfaceMaterial& createSurfaceMaterial( Rc<DxvkContext> ctx, 
                                                   const MaterialData& renderMaterialData,
                                                   const DrawCallState& drawCallState,
                                                   uint32_t* out_indexInCache = nullptr);
@@ -303,6 +304,9 @@ private:
   struct DrawCallMetaInfo {
     XXH64_hash_t legacyTextureHash { kEmptyHash };
     XXH64_hash_t legacyTextureHash2 { kEmptyHash };
+    // MHFZ start : legacy mesh hash are now saved into DrawCallMetaInfo
+    XXH64_hash_t legacyMeshHash { kEmptyHash };
+    // MHFZ end
   };
   struct DrawCallMeta {
     constexpr static inline uint8_t MaxTicks = 2;

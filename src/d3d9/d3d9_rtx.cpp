@@ -1083,6 +1083,7 @@ namespace dxvk {
       m_activeDrawCallState.materialData.metallicTexture = {};
       m_activeDrawCallState.materialData.heightTexture = {};
       m_activeDrawCallState.materialData.colorTextureSlot[textureID] = kInvalidResourceSlot;
+      m_activeDrawCallState.materialData.materialLayer = nullptr;
     }
     // MHFZ end
 
@@ -1126,9 +1127,18 @@ namespace dxvk {
       // Cache the slot we want to bind
       const bool srgb = d3d9State().samplerStates[stage][D3DSAMP_SRGBTEXTURE] & 0x1;
 
-      // MHFZ start : gather all overwritten textures
-      auto legacyTextures = m_parent->GetLegacyManager().getTextures(d3d9State().textures[stage]);
-
+      // MHFZ start : gather all overwritten textures and get from D3D9 common texture the legacy materail layer
+      // or from mesh if it's overriden
+      auto legacyTextures = m_parent->GetLegacyManager().getTextures(pTexInfo);
+      LegacyMaterialLayer* legacyMaterialLayer = m_parent->GetLegacyManager().getLegacyMaterialLayer(pTexInfo);
+      LegacyMeshLayer* legacyMeshLayer = m_parent->GetLegacyManager().getLegacyMeshLayer(m_activeDrawCallState.getGeometryData().getHashForRule<rules::TopologicalHash>());
+      if (legacyMeshLayer && legacyMeshLayer->overrideMaterial) {
+        legacyMaterialLayer = &legacyMeshLayer->materialLayer;
+      }
+      if (legacyMaterialLayer && legacyMaterialLayer->alphaTestReferenceValue > 0) {
+        m_activeDrawCallState.materialData.alphaTestReferenceValue = legacyMaterialLayer->alphaTestReferenceValue;
+      }
+      // MHF end
       if (legacyTextures.managedAlbedoTexture != nullptr) {
         m_activeDrawCallState.materialData.colorTextures[1] = TextureRef(legacyTextures.managedAlbedoTexture);
       }
@@ -1144,6 +1154,7 @@ namespace dxvk {
       if (legacyTextures.managedHeightTexture != nullptr) {
         m_activeDrawCallState.materialData.heightTexture = TextureRef(legacyTextures.managedHeightTexture);
       }
+      m_activeDrawCallState.materialData.materialLayer = legacyMaterialLayer;
       // MHFZ end
 
       m_activeDrawCallState.materialData.colorTextures[textureID] = TextureRef(pTexInfo->GetSampleView(srgb));

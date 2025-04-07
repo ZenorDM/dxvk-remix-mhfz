@@ -494,7 +494,7 @@ struct DrawCallState {
     return categories;
   }
 
-  bool finalizePendingFutures(const RtCamera* pLastCamera);
+  bool finalizePendingFutures(const RtCamera* pLastCamera, LegacyManager& legacyManager);
 
   bool hasTextureCoordinates() const {
     return getGeometryData().texcoordBuffer.defined() || getTransformData().texgenMode != TexGenMode::None;

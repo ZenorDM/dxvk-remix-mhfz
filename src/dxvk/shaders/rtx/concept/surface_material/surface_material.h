@@ -98,9 +98,14 @@ struct OpaqueSurfaceMaterial
   uint16_t samplerFeedbackStamp;
 
   // Todo: Fixed function blend state info here in the future (Actually this should go on a Legacy Material, or some sort of non-PBR Legacy Surface)
+  // MHFZ start : cutom surface material params
+  float16_t normalIntensity;
+  float16_t softBlendFactor;
+  float16_t alphaBias;
+  // MHFZ end
 
   // padding (to keep size matching with MemoryPolymorphicSurfaceMaterial)
-  uint16_t data[7];
+  uint16_t data[4];
 
   bool hasValidDisplacement() {
     return flags & OPAQUE_SURFACE_MATERIAL_FLAG_HAS_DISPLACEMENT;

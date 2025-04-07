@@ -406,7 +406,9 @@ void resolveVertex<T: IBasePayloadState>(
       opaqueSurfaceMaterialInteractionCreate(opaqueSurfaceMaterial, surface, surfaceInteraction, rayInteraction);
 
     // Blend any decal(s) that happened before this interaction
-    if (decalMaterialBlending && resolveVertexState.decalEncountered)
+    // MHFZ start : surface can avoid decals with OPAQUE_SURFACE_MATERIAL_FLAG_REJECT_DECAL flag
+    if (decalMaterialBlending && resolveVertexState.decalEncountered && ((opaqueSurfaceMaterial.flags & OPAQUE_SURFACE_MATERIAL_FLAG_REJECT_DECAL) == 0))
+    // MHFZ end
     {
       MemoryDecalMaterialInteraction memory;
       memory.packed = decalMemory;
@@ -1009,7 +1011,7 @@ void resolveVertexUnordered<let RAY_FLAGS : uint8_t>(
     // Note: Current iteration's radiance attenuation and emissive radiance separated out for manual unordered blending logic.
     float16_t currentRadianceAttenuation = float16_t(1.0f);
     vec3 currentEmissiveRadiance = vec3(0.0f);
-
+    float16_t blendFactor = float16_t(1.0f);
     if (polymorphicType == surfaceMaterialTypeOpaque)
     {
       const OpaqueSurfaceMaterial opaqueSurfaceMaterial = opaqueSurfaceMaterialCreate(memoryPolymorphicSurfaceMaterial);
@@ -1017,10 +1019,15 @@ void resolveVertexUnordered<let RAY_FLAGS : uint8_t>(
       const OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteraction =
         opaqueSurfaceMaterialInteractionCreate(opaqueSurfaceMaterial, surface, surfaceInteraction, rayInteraction);
 
+      // MHFZ start: add per surface softBlendFactor
+      blendFactor = opaqueSurfaceMaterial.softBlendFactor;
+      // MHFZ end
       if (isTriangle && surfaceIsDecal(surface))
       {
         const float opacity = opaqueSurfaceMaterialInteraction.opacity;
-        if (opacity > 0.001f && rayInteraction.frontHit)
+        // MHFZ start: allow front hit to be decal to fix some reversed blend mesh
+        if (opacity > 0.001f)
+        // MHFZ end
         {
           uint decalSortKey = (uint(surface.decalSortOrder) << 24) + ((rayHitInfo.geometryIndex & 0xff) << 16) + (rayHitInfo.primitiveIndex & 0xffff);
           DecalMaterialInteraction decalMaterialInteraction = decalMaterialInteractionCreate(opaqueSurfaceMaterialInteraction);
@@ -1100,8 +1107,9 @@ void resolveVertexUnordered<let RAY_FLAGS : uint8_t>(
       // fading out portions of particles closer to walls. Only done for Surfaces labeled as particles.
 
       const float16_t softBlendFactor = saturate((ray.tMax - rayHitInfo.hitDistance) / (ray.tMax * uint16BitsToHalf(cb.particleSoftnessFactor)));
-      const float16_t blendFactor = surface.isParticle ? softBlendFactor : float16_t(1.0);
-
+      // MHFZ start :  add softBlendFactor per surface
+      blendFactor *= surface.isParticle ? softBlendFactor  : float16_t(1.0);
+      // MHFZ end
       currentRadianceAttenuation = mix(float16_t(1.0f), currentRadianceAttenuation, blendFactor);
       currentEmissiveRadiance = mix(vec3(0.0f), currentEmissiveRadiance, blendFactor);
 

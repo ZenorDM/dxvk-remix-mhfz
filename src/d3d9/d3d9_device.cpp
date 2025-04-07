@@ -3690,14 +3690,14 @@ namespace dxvk {
 
     if (unlikely(ShouldRecord()))
       return S_OK;
-
-    m_legacyManager.pushToLoad(hash, texture);
+    
+    m_dxvkDevice->getLegacyManager().pushToLoad(hash, GetCommonTexture(texture));
 
     return S_OK;
   }
   
   HRESULT STDMETHODCALLTYPE D3D9DeviceEx::DestroyBaseTexture(IDirect3DBaseTexture9* texture) {
-    m_legacyManager.destroyTexture(texture);
+    m_dxvkDevice->getLegacyManager().destroyTexture(GetCommonTexture(texture));
     return S_OK;
   }
   // MHFZ end
@@ -4081,7 +4081,7 @@ namespace dxvk {
     D3D9DeviceLock lock = LockDevice();
 
     // MHFZ start : update custom textures loading, todo move this to custom thread
-    m_legacyManager.updateLoadingThread(0, m_dxvkDevice->getCommon()->getTextureManager());
+    GetLegacyManager().updateLoadingThread(0, m_dxvkDevice->getCommon()->getTextureManager());
     // MHFZ end
 
     if (unlikely(ShouldRecord()))
@@ -8041,7 +8041,9 @@ namespace dxvk {
     // We do not flush empty chunks, so if we are tracking a resource
     // immediately after a flush, we need to use the sequence number
     // of the previously submitted chunk to prevent deadlocks.
-    return m_csChunk->empty() ? m_csSeqNum : m_csSeqNum + 1;
+    // MHFZ start : add m_csChunk guard to avoid minimize screen crash
+    return !m_csChunk || m_csChunk->empty() ? m_csSeqNum : m_csSeqNum + 1;
+    // MHFZ end
   }
 
 }

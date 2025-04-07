@@ -34,10 +34,6 @@
 #include "../util/util_flush.h"
 #include "../util/util_lru.h"
 
-// MHFZ start: required include
-#include "../dxvk/rtx_render/rtx_legacy_manager.h"
-// MHFZ end
-
 namespace dxvk {
 
   class D3D9InterfaceEx;
@@ -975,7 +971,7 @@ namespace dxvk {
     }
 
     LegacyManager& GetLegacyManager() {
-      return m_legacyManager;
+      return m_dxvkDevice->getLegacyManager();
     }
 
     // MHFZ end
@@ -1004,14 +1000,18 @@ namespace dxvk {
 // NV-DXVK end
     template<bool AllowFlush = true, typename Cmd>
     void EmitCs(Cmd&& command) {
-      if (unlikely(!m_csChunk->push(command))) {
-        EmitCsChunk(std::move(m_csChunk));
-        m_csChunk = AllocCsChunk();
+      // MHFZ start : add m_csChunk guard to avoid minimize screen crash
+      if (m_csChunk) {
+      // MHFZ end
+        if (unlikely(!m_csChunk->push(command))) {
+          EmitCsChunk(std::move(m_csChunk));
+          m_csChunk = AllocCsChunk();
 
-        if constexpr (AllowFlush)
-          ConsiderFlush(GpuFlushType::ImplicitWeakHint);
+          if constexpr (AllowFlush)
+            ConsiderFlush(GpuFlushType::ImplicitWeakHint);
 
-        m_csChunk->push(command);
+          m_csChunk->push(command);
+        }
       }
     }
 // NV-DXVK start: external API
@@ -1358,7 +1358,6 @@ namespace dxvk {
     // MHFZ start
     bool                            m_rayTraceThisFrame = false;
 
-    LegacyManager                   m_legacyManager;
     // MHFZ end
   };
 

@@ -286,7 +286,7 @@ public:
   // Takes a scene object entry (blas + drawcall) and generates/finds the instance data internally
   RtInstance* processSceneObject(
     const CameraManager& cameraManager, const RayPortalManager& rayPortalManager,
-    BlasEntry& blas, const DrawCallState& drawCall, const MaterialData& materialData, const RtSurfaceMaterial& material);
+    BlasEntry& blas, const DrawCallState& drawCall, const MaterialData& materialData, RtSurfaceMaterial& material);
 
   // Creates a copy of a reference instance and adds it to the instance pool
   // Temporary single frame instances generated every frame should disable valid id generation to avoid overflowing it
@@ -343,11 +343,11 @@ private:
 
   void updateInstance(
     RtInstance& currentInstance, const CameraManager& cameraManager,
-    const BlasEntry& blas, const DrawCallState& drawCall, const MaterialData& materialData, const RtSurfaceMaterial& material);
+    const BlasEntry& blas, const DrawCallState& drawCall, const MaterialData& materialData, RtSurfaceMaterial& material);
 
   void removeInstance(RtInstance* instance);
 
-  static RtSurface::AlphaState calculateAlphaState(const DrawCallState& drawCall, const MaterialData& materialData, const RtSurfaceMaterial& material);
+  static RtSurface::AlphaState calculateAlphaState(const DrawCallState& drawCall, const MaterialData& materialData, RtSurfaceMaterial& material);
 
   // Modifies an instance given active developer options. Returns true if the instance was modified
   bool applyDeveloperOptions(RtInstance& currentInstance, const DrawCallState& drawCall);

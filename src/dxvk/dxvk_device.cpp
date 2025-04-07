@@ -52,7 +52,10 @@ namespace dxvk {
     // NV-DXVK start: DLFG + RTXIO
     // Get desired queues from the device
 
+    // MHFZ start
     m_shaderHasher.loadProfil();
+    m_legacyManager.load();
+    // MHFZ end
 
     m_queues.graphics = getQueue(adapterQueueInfos.graphics.queueFamilyIndex, adapterQueueInfos.graphics.queueIndex);
     m_queues.transfer = getQueue(adapterQueueInfos.transfer.queueFamilyIndex, adapterQueueInfos.transfer.queueIndex);

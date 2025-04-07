@@ -633,7 +633,9 @@ OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteractionCreate(
     chooseTextureArgument(textureAlphaArg1, surface.textureAlphaArg1Source, opacity, surfaceInteraction.vertexColor.a, tFactor.a, opacity);
     chooseTextureArgument(textureAlphaArg2, surface.textureAlphaArg2Source, opacity, surfaceInteraction.vertexColor.a, tFactor.a, float16_t(1.0h));
     chooseTextureOperationAlpha(opacity, surface.textureAlphaOperation, textureAlphaArg1, textureAlphaArg2);
-  
+    // MHFZ start : add per surface alpha bias
+    opacity = saturate(opacity + opaqueSurfaceMaterial.alphaBias);
+    // MHFZ end
     calcOpaqueSurfaceMaterialOpacity(
       albedo, opacity, surface, opacity, emissiveBlendOverrideInfluence);
   }
@@ -657,9 +659,13 @@ OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteractionCreate(
     // By dividing the vertex color by its largest component, the result is irrelavant to N*L, but proportional to the 
     // original diffuse color, which is more desired.
     // In practice, we add an adjustable blending factor to avoid extreme cases.
-    surfaceInteraction.vertexColor.rgb = max(surfaceInteraction.vertexColor.rgb, f16vec3(1.0 / 255.0));
-    float16_t maxColor = max(surfaceInteraction.vertexColor.r, max(surfaceInteraction.vertexColor.g, surfaceInteraction.vertexColor.b));
-    surfaceInteraction.vertexColor.rgb /= maxColor;
+    // MHFZ start : avoid vertex color "normalization" if OPAQUE_SURFACE_MATERIAL_FLAG_NORMALIZE_VERTEX_COLOR flag is set
+    if (opaqueSurfaceMaterial.flags & OPAQUE_SURFACE_MATERIAL_FLAG_NORMALIZE_VERTEX_COLOR) {
+    // MHFZ end
+        surfaceInteraction.vertexColor.rgb = max(surfaceInteraction.vertexColor.rgb, f16vec3(1.0 / 255.0));
+        float16_t maxColor = max(surfaceInteraction.vertexColor.r, max(surfaceInteraction.vertexColor.g, surfaceInteraction.vertexColor.b));
+        surfaceInteraction.vertexColor.rgb /= maxColor;
+    }
     surfaceInteraction.vertexColor.rgb = mix(f16vec3(1), surfaceInteraction.vertexColor.rgb, float16_t(cb.vertexColorStrength));
 
     // Note: Gamma correct vertex color input.
@@ -703,7 +709,9 @@ OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteractionCreate(
     else // Decode encoded normal sample
     {
       // Note: Using f16 from texture to decode from is fine as the original texture is only 8 bits of precision.
-      tangentNormal = unsignedOctahedralToHemisphereDirection(vec2(normalSample.xy), cb.opaqueMaterialArgs.normalIntensity);
+      // MHFZ start : add per surface normal intensity
+      tangentNormal = unsignedOctahedralToHemisphereDirection(vec2(normalSample.xy), cb.opaqueMaterialArgs.normalIntensity * opaqueSurfaceMaterial.normalIntensity);
+      // MHFZ end
     }
     
     const f16mat3 tangentToWorld = transpose(worldToTangent);
@@ -724,8 +732,10 @@ OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteractionCreate(
 
     if (secondNormalLoaded)
     {
-      f16vec3 tangentNormal2 = unsignedOctahedralToHemisphereDirection(vec2(secondNormalSample.xy), cb.opaqueMaterialArgs.normalIntensity);
-      
+      // MHFZ start : add per surface normal intensity
+      f16vec3 tangentNormal2 = unsignedOctahedralToHemisphereDirection(vec2(secondNormalSample.xy), cb.opaqueMaterialArgs.normalIntensity * opaqueSurfaceMaterial.normalIntensity);
+      // MHFZ end
+
       tangentNormal2 = normalBlendRNM(tangentNormal2, tangentNormal);
       normal = normalize(mul(tangentToWorld, tangentNormal2));
 
@@ -748,7 +758,9 @@ OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteractionCreate(
 
   if (roughnessLoaded)
   {
-    roughness = roughnessSample.x;
+    // MHFZ start : add per surface roughness bias
+    roughness = saturate(roughness+roughnessSample.x);
+    // MHFZ end
   }
 
 #if defined(RAY_TRACING_PRIMARY_RAY)
@@ -766,7 +778,9 @@ OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteractionCreate(
 
   if (metallicLoaded)
   {
-    metallic = metallicSample.x;
+    // MHFZ start : add per surface metallic bias
+    metallic = saturate(metallic + metallicSample.x);
+    // MHFZ end
   }
     
   metallic = saturate(metallic * cb.opaqueMaterialArgs.metallicScale + cb.opaqueMaterialArgs.metallicBias);
@@ -823,11 +837,15 @@ OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteractionCreate(
     // This is so that when "emissive" style blending is used it looks more correct in a physically based way based on the influence from the mode in question.
     // Todo: Move this all once separate Surface Materials for D3D9 compatability and normal usage are created.
     derivedEmissiveColor = originalAlbedo;
-    derivedEmissiveIntensity = emissiveBlendOverrideInfluence * uint16BitsToHalf(cb.emissiveBlendOverrideEmissiveIntensity);
+    // MHFZ start : add per surface emissive intensity
+    derivedEmissiveIntensity = emissiveBlendOverrideInfluence * uint16BitsToHalf(cb.emissiveBlendOverrideEmissiveIntensity) * opaqueSurfaceMaterial.emissiveIntensity;
+    // MHFZ end
   }
   else
   {
-    derivedEmissiveColor = emissiveColor;
+     // MHFZ start : use original albedo as emissive color
+    derivedEmissiveColor = emissiveColor * originalAlbedo;
+    // MHFZ end
     derivedEmissiveIntensity = opaqueSurfaceMaterial.emissiveIntensity;
   }
 

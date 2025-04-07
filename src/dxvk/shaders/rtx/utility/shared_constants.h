@@ -25,9 +25,9 @@
 // contains constants shared between shader and host code
 
 static const uint8_t surfaceMaterialTypeOpaque = uint8_t(0u);
-static const uint8_t surfaceMaterialTypeTranslucent = uint8_t(1u);
-static const uint8_t surfaceMaterialTypeRayPortal = uint8_t(2u);
-static const uint8_t surfaceMaterialTypeMask = uint8_t(0x3u);
+static const uint16_t surfaceMaterialTypeTranslucent = uint16_t(1u);
+static const uint16_t surfaceMaterialTypeRayPortal = uint16_t(2u);
+static const uint16_t surfaceMaterialTypeMask = uint16_t(0x3u);
 
 #define COMMON_MATERIAL_FLAG_TYPE_MASK surfaceMaterialTypeMask
 #define COMMON_MATERIAL_FLAG_TYPE_OFFSET(X) (2 + X)
@@ -44,7 +44,10 @@ static const uint8_t surfaceMaterialTypeMask = uint8_t(0x3u);
 #define OPAQUE_SURFACE_MATERIAL_FLAG_IGNORE_ALPHA_CHANNEL (1 << COMMON_MATERIAL_FLAG_TYPE_OFFSET(2))
 #define OPAQUE_SURFACE_MATERIAL_FLAG_IS_RAYTRACED_RENDER_TARGET (1 << COMMON_MATERIAL_FLAG_TYPE_OFFSET(3))
 #define OPAQUE_SURFACE_MATERIAL_FLAG_HAS_DISPLACEMENT (1 << COMMON_MATERIAL_FLAG_TYPE_OFFSET(4))
-
+// MHFZ start : custom surface material flags
+#define OPAQUE_SURFACE_MATERIAL_FLAG_NORMALIZE_VERTEX_COLOR (1 << COMMON_MATERIAL_FLAG_TYPE_OFFSET(5))
+#define OPAQUE_SURFACE_MATERIAL_FLAG_REJECT_DECAL (1 << COMMON_MATERIAL_FLAG_TYPE_OFFSET(6))
+// MHFZ end
 
 #define OPAQUE_SURFACE_MATERIAL_INTERACTION_FLAG_HAS_HEIGHT_TEXTURE (1 << 0)
 #define OPAQUE_SURFACE_MATERIAL_INTERACTION_FLAG_USE_THIN_FILM_LAYER (1 << 1)

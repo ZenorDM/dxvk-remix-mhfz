@@ -3,15 +3,215 @@
 #include "rtx_asset_data_manager.h"
 #include "dxvk_device.h"
 #include "rtx_texture_manager.h"
+#include <json/json.hpp>
+
+using json = nlohmann::json;
 
 namespace dxvk {
-  
-  LegacyTexture::LegacyTexture(uint32_t textureHash, std::string albedoTexturePath, std::optional<std::string>& normalTexturePath, std::optional<std::string>& roughnessTexturePath, std::optional<std::string>& metallicTexturePath, std::optional<std::string>& heightTexturePath)
-    : hash(textureHash), albedoTexturePath(albedoTexturePath), normalTexturePath(normalTexturePath), roughnessTexturePath(roughnessTexturePath), metallicTexturePath(metallicTexturePath), heightTexturePath(heightTexturePath){
+
+  static LegacyMaterialLayer defaultLayerMaterial;
+
+  LegacyTexture::LegacyTexture(uint32_t textureHash,
+                               std::optional< std::string> albedoTexturePath, 
+                               std::optional<std::string>& normalTexturePath, 
+                               std::optional<std::string>& roughnessTexturePath, 
+                               std::optional<std::string>& metallicTexturePath, 
+                               std::optional<std::string>& heightTexturePath,
+                               TextureOrigin origin,
+                               LegacyMaterialLayer* legacyMaterialLayer)
+    : hash(textureHash), 
+    albedoTexturePath(albedoTexturePath), 
+    normalTexturePath(normalTexturePath),
+    roughnessTexturePath(roughnessTexturePath), 
+    metallicTexturePath(metallicTexturePath),
+    heightTexturePath(heightTexturePath),
+    origin(origin),
+    legacyMaterialLayer(legacyMaterialLayer){
 
   }
 
-  void LegacyManager::pushToLoad(uint32_t texturehash, IDirect3DBaseTexture9* texture){
+  void to_json(json& j, const Vector3& p) {
+    j = json { {"x", p.x},{"y", p.y},{"z", p.z} };
+  }
+
+  void from_json(const json& j, Vector3& p) {
+    j.at("x").get_to(p.x);
+    j.at("y").get_to(p.y);
+    j.at("z").get_to(p.z);
+  }
+
+  void to_json(json& j, const LegacyMaterialLayer& p) {
+    j = json { { "RoughnessBias", p.roughnessBias },
+              {"MetallicBias", p.metallicBias} ,
+              {"EmissiveIntensity", p.emissiveIntensity} ,
+              {"NormalStrenght", p.normalStrenght},
+
+              {"DisplacementFactor", p.displacementFactor},
+
+              {"SubsurfaceTransmittanceColor", p.subsurfaceTransmittanceColor},
+              {"SubsurfaceMeasurementDistance", p.subsurfaceMeasurementDistance},
+              {"SubsurfaceSingleScatteringAlbedo", p.subsurfaceSingleScatteringAlbedo},
+              {"SubsurfaceVolumetricAnisotropy", p.subsurfaceVolumetricAnisotropy},
+              {"IsSubsurfaceDiffusionProfile", p.isSubsurfaceDiffusionProfile},
+              {"SubsurfaceRadius", p.subsurfaceRadius},
+              {"SubsurfaceRadiusScale", p.subsurfaceRadiusScale},
+              {"SubsurfaceMaxSampleRadius", p.subsurfaceMaxSampleRadius},
+
+              {"ThinFilmEnable", p.thinFilmEnable},
+              {"AlphaIsThinFilmThickness", p.alphaIsThinFilmThickness},
+              {"ThinFilmThicknessConstant", p.thinFilmThicknessConstant},
+
+              {"AlphaTestReferenceValue", p.alphaTestReferenceValue},
+              {"SoftBlendFactor", p.softBlendFactor},
+
+              {"Features", p.features} };
+  }
+
+  void from_json(const json& j, LegacyMaterialLayer& p) {
+    j.at("RoughnessBias").get_to(p.roughnessBias);
+    j.at("MetallicBias").get_to(p.metallicBias);
+    j.at("EmissiveIntensity").get_to(p.emissiveIntensity);
+    j.at("NormalStrenght").get_to(p.normalStrenght);
+
+    j.at("DisplacementFactor").get_to(p.displacementFactor);
+
+    j.at("SubsurfaceTransmittanceColor").get_to(p.subsurfaceTransmittanceColor);
+    j.at("SubsurfaceMeasurementDistance").get_to(p.subsurfaceMeasurementDistance);
+    j.at("SubsurfaceSingleScatteringAlbedo").get_to(p.subsurfaceSingleScatteringAlbedo);
+    j.at("SubsurfaceVolumetricAnisotropy").get_to(p.subsurfaceVolumetricAnisotropy);
+    j.at("IsSubsurfaceDiffusionProfile").get_to(p.isSubsurfaceDiffusionProfile);
+    j.at("SubsurfaceRadius").get_to(p.subsurfaceRadius);
+    j.at("SubsurfaceRadiusScale").get_to(p.subsurfaceRadiusScale);
+    j.at("SubsurfaceMaxSampleRadius").get_to(p.subsurfaceMaxSampleRadius);
+
+    j.at("ThinFilmEnable").get_to(p.thinFilmEnable);
+    j.at("AlphaIsThinFilmThickness").get_to(p.alphaIsThinFilmThickness);
+    j.at("ThinFilmThicknessConstant").get_to(p.thinFilmThicknessConstant);
+
+    j.at("AlphaTestReferenceValue").get_to(p.alphaTestReferenceValue);
+    j.at("SoftBlendFactor").get_to(p.softBlendFactor);
+
+    j.at("Features").get_to(p.features);
+  }
+
+  void to_json(json& j, const LegacyMeshLayer& p) {
+    j = json { { "MaterialLayer", p.materialLayer },
+              {"WorldPosOffset", p.offset} ,
+              {"OverrideMaterial", p.overrideMaterial},
+              {"Features", p.features}};
+  }
+
+  void from_json(const json& j, LegacyMeshLayer& p) {
+    j.at("MaterialLayer").get_to(p.materialLayer);
+    j.at("WorldPosOffset").get_to(p.offset);
+    j.at("OverrideMaterial").get_to(p.overrideMaterial);
+    j.at("Features").get_to(p.features);
+  }
+
+
+  void LegacyManager::load() { 
+    {
+      wchar_t file_prefix[MAX_PATH] = L"";
+      GetModuleFileNameW(nullptr, file_prefix, ARRAYSIZE(file_prefix));
+      std::filesystem::path dump_path = file_prefix;
+      dump_path = dump_path.parent_path();
+      dump_path /= "LegacyMaterialsLayer.json";
+
+      if (std::filesystem::exists(dump_path) == false)
+        return;
+      std::ifstream i;
+      i.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+      try {
+        i.open(dump_path.c_str());
+      }
+      catch (std::system_error& e) {
+        Logger::err(e.code().message());
+      }
+
+      if (!i.is_open()) {
+        return;
+      }
+      json j;
+      try {
+        j = json::parse(i);
+      }
+      catch (json::parse_error& ex) {
+        std::string error = str::format("load parse error at byte", ex.byte);
+        Logger::err(error.c_str());
+      }
+
+      m_legacyMaterialsLayer = j.get<std::unordered_map<uint32_t, LegacyMaterialLayer>>();
+    }
+    {
+      wchar_t file_prefix[MAX_PATH] = L"";
+      GetModuleFileNameW(nullptr, file_prefix, ARRAYSIZE(file_prefix));
+      std::filesystem::path dump_path = file_prefix;
+      dump_path = dump_path.parent_path();
+      dump_path /= "LegacyMeshesLayer.json";
+
+      if (std::filesystem::exists(dump_path) == false)
+        return;
+      std::ifstream i;
+      i.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+      try {
+        i.open(dump_path.c_str());
+      }
+      catch (std::system_error& e) {
+        Logger::err(e.code().message());
+      }
+
+      if (!i.is_open()) {
+        return;
+      }
+      json j;
+      try {
+        j = json::parse(i);
+      }
+      catch (json::parse_error& ex) {
+        std::string error = str::format("load parse error at byte", ex.byte);
+        Logger::err(error.c_str());
+      }
+
+      m_legacyMeshesLayer = j.get<std::unordered_map<XXH64_hash_t, LegacyMeshLayer>>();
+    }
+  }
+
+  void LegacyManager::save() {
+    {
+      json j;
+
+      wchar_t file_prefix[MAX_PATH] = L"";
+      GetModuleFileNameW(nullptr, file_prefix, ARRAYSIZE(file_prefix));
+      std::filesystem::path dump_path = file_prefix;
+      dump_path = dump_path.parent_path();
+      dump_path /= "LegacyMaterialsLayer.json";
+
+      j = m_legacyMaterialsLayer;
+
+      std::ofstream o { dump_path.c_str() };
+      o << j;
+    }
+    {
+      json jMesh;
+
+      wchar_t file_prefix[MAX_PATH] = L"";
+      GetModuleFileNameW(nullptr, file_prefix, ARRAYSIZE(file_prefix));
+      std::filesystem::path dump_path = file_prefix;
+      dump_path = dump_path.parent_path();
+      dump_path /= "LegacyMeshesLayer.json";
+
+      jMesh = m_legacyMeshesLayer;
+
+      std::ofstream oMesh { dump_path.c_str() };
+      oMesh << jMesh;
+    }
+  }
+
+  void LegacyManager::pushMeshMaterial(XXH64_hash_t meshHash) { 
+    auto [it, _] = m_legacyMeshesLayer.try_emplace(meshHash, LegacyMeshLayer {});
+  }
+
+  void LegacyManager::pushToLoad(uint32_t texturehash, D3D9CommonTexture* texture){
 
     unsigned int nthreads = std::min(std::thread::hardware_concurrency(), TextureLoadThreadCount);
 
@@ -24,6 +224,12 @@ namespace dxvk {
         selectedThread = threadID;
       }
     }*/
+
+    std::optional<std::string> albedoPath;
+    std::optional<std::string> normalPath;
+    std::optional<std::string> roughnessPath;
+    std::optional<std::string> metallicPath;
+    std::optional<std::string> heightPath;
 
     wchar_t file_prefix[MAX_PATH] = L"";
     GetModuleFileNameW(nullptr, file_prefix, ARRAYSIZE(file_prefix));
@@ -38,18 +244,14 @@ namespace dxvk {
       swprintf_s(hash_string, L"%x", texturehash);
       std::wstring strHash = hash_string;
       for (const auto& entry : std::filesystem::directory_iterator(folderPath)) {
-        std::filesystem::path texturePath = entry;
-        texturePath /= strHash;
-        texturePath += ".a.rtex.dds";
+        std::filesystem::path albedoPathTexturePath = entry;
+        albedoPathTexturePath /= strHash;
+        albedoPathTexturePath += ".a.rtex.dds";
 
-        if (std::filesystem::exists(texturePath)) {
-    
-          std::optional<std::string> normalPath;
-          std::optional<std::string> roughnessPath;
-          std::optional<std::string> metallicPath;
-          std::optional<std::string> heightPath;
-
-        for (const auto& entryPbr : std::filesystem::directory_iterator(folderPath)) {
+        if (std::filesystem::exists(albedoPathTexturePath)) {
+   
+          albedoPath = albedoPathTexturePath.string();
+          for (const auto& entryPbr : std::filesystem::directory_iterator(folderPath)) {
               std::filesystem::path normalTexturePath = entryPbr;
               normalTexturePath /= strHash;
               normalTexturePath += "_normal_dx_OTH_Normal.n.rtex.dds";
@@ -74,12 +276,26 @@ namespace dxvk {
               if (std::filesystem::exists(heightTexturePath)) {
                 heightPath = heightTexturePath.string();
               }
-          }
-          m_textures[0].emplace(texture, LegacyTexture { texturehash,texturePath.string(), normalPath, roughnessPath, metallicPath, heightPath });
-          return;
+            }
         }
       }
     }
+    TextureOrigin origin = TextureOrigin::None;
+    if (albedoPath.has_value()) {
+      const std::string& path = albedoPath.value();
+      if (path.find("stage") != std::string::npos) {
+        origin = TextureOrigin::Stage;
+      }
+      else if (path.find("emmodel") != std::string::npos) {
+        origin = TextureOrigin::Emmodel;
+      }
+      else if (path.find("extend") != std::string::npos) {
+        origin = TextureOrigin::Extend;
+      }
+    }
+    auto [it,_] = m_legacyMaterialsLayer.try_emplace(texturehash, LegacyMaterialLayer {});
+    m_textures[0].emplace(texture, LegacyTexture { texturehash , albedoPath, normalPath, roughnessPath, metallicPath, heightPath, origin, &(it->second) });
+
   }
 
   void LegacyManager::loadFile(LegacyTexture& texture, RtxTextureManager& textureManager){
@@ -93,8 +309,9 @@ namespace dxvk {
 
     // Check if a replacement file for this texture hash exists and if so, overwrite the texture
     texture.state = TextureState::Loaded;
-    loadAssetData(texture.albedoTexturePath, texture.managedTextures.managedAlbedoTexture);
-
+    if (texture.albedoTexturePath.has_value()) {
+      loadAssetData(texture.albedoTexturePath.value(), texture.managedTextures.managedAlbedoTexture);
+    }
     if (texture.normalTexturePath.has_value()) {
       loadAssetData(texture.normalTexturePath.value(), texture.managedTextures.managedNormalTexture);
     }
@@ -110,7 +327,7 @@ namespace dxvk {
     
   }
 
-  void LegacyManager::destroyTexture(IDirect3DBaseTexture9* texture) {
+  void LegacyManager::destroyTexture(D3D9CommonTexture* texture) {
     auto it = m_textures[0].find(texture);
     if (it != m_textures[0].end()) {
       if(it->second.managedTextures.managedAlbedoTexture != nullptr)
@@ -134,7 +351,7 @@ namespace dxvk {
       }
     }
   }
-  LegacyManagedTextures LegacyManager::getTextures(IDirect3DBaseTexture9* texture)
+  LegacyManagedTextures LegacyManager::getTextures(D3D9CommonTexture* texture)
   {
     auto it = m_textures[0].find(texture);
     if (it != m_textures[0].end()) {
@@ -143,6 +360,46 @@ namespace dxvk {
     else{
       return LegacyManagedTextures {};
     }
+  }
+
+  uint32_t LegacyManager::getTextureHash(D3D9CommonTexture* texture) {
+    auto it = m_textures[0].find(texture);
+    if (it != m_textures[0].end()) {
+      return it->second.hash;
+    } else {
+      return 0;
+    }
+  }
+
+  uint32_t LegacyManager::getTextureOrigin(D3D9CommonTexture* texture) {
+    auto it = m_textures[0].find(texture);
+    if (it != m_textures[0].end()) {
+      return (uint32_t)it->second.origin;
+    } else {
+      return 0;
+    }
+  }
+
+  LegacyMaterialLayer* LegacyManager::getLegacyMaterialLayer(D3D9CommonTexture* texture) {
+    auto it = m_textures[0].find(texture);
+    if (it != m_textures[0].end()) {
+      return it->second.legacyMaterialLayer;
+    } else {
+      return nullptr;
+    }
+  }
+
+  LegacyMeshLayer* LegacyManager::getLegacyMeshLayer(XXH64_hash_t meshHash) {
+    auto it = m_legacyMeshesLayer.find(meshHash);
+    if (it != m_legacyMeshesLayer.end()) {
+      return &(it->second);
+    } else {
+      return nullptr;
+    }
+  }
+
+  void LegacyMaterialLayer::resetLayerMaterial() {
+    *this = defaultLayerMaterial;
   }
 
 }
