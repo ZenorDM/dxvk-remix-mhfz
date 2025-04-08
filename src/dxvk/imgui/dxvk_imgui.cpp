@@ -1941,6 +1941,7 @@ namespace dxvk {
                   drawFeature("RejectDecal", LegacyMaterialFeature::RejectDecal);
                   drawFeature("BackFaceCulling", LegacyMaterialFeature::BackFaceCulling);
                   drawFeature("NoFade", LegacyMaterialFeature::NoFade);
+                  drawFeature("Water", LegacyMaterialFeature::Water);
 
                   ImGui::TreePop();
                 }

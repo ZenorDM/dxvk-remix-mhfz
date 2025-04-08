@@ -418,7 +418,7 @@ struct RtOpaqueSurfaceMaterial {
     uint32_t subsurfaceMaterialIndex, bool isRaytracedRenderTarget,
     uint16_t samplerFeedbackStamp, 
     // MHFZ start : custom material params
-    float normalIntensity, float softBlendFactor, bool normalizeVertexColor, bool rejectDecal, float alphaBias, bool noFade
+    float normalIntensity, float softBlendFactor, bool normalizeVertexColor,LegacyMaterialFeature features, float alphaBias
     // MHFZ end
   ) :
     m_albedoOpacityTextureIndex{ albedoOpacityTextureIndex }, m_normalTextureIndex{ normalTextureIndex },
@@ -433,7 +433,7 @@ struct RtOpaqueSurfaceMaterial {
     m_displaceOut{ displaceOut }, m_subsurfaceMaterialIndex(subsurfaceMaterialIndex), m_isRaytracedRenderTarget(isRaytracedRenderTarget),
     m_samplerFeedbackStamp{ samplerFeedbackStamp },
     // MHFZ start : custom material params
-    m_normalIntensity{ normalIntensity }, m_softBlendFactor{ softBlendFactor }, m_normalizeVertexColor { normalizeVertexColor }, m_rejectDecal{ rejectDecal },m_alphaBias { alphaBias }, m_noFade{ noFade }
+    m_normalIntensity{ normalIntensity }, m_softBlendFactor{ softBlendFactor }, m_normalizeVertexColor { normalizeVertexColor }, m_features { features },m_alphaBias { alphaBias }
     // MHFZ end
   {
     updateCachedData();
@@ -474,14 +474,17 @@ struct RtOpaqueSurfaceMaterial {
       flags |= OPAQUE_SURFACE_MATERIAL_FLAG_NORMALIZE_VERTEX_COLOR;
     }
 
-    if (m_rejectDecal) {
+    if ((m_features & LegacyMaterialFeature::RejectDecal) != LegacyMaterialFeature::None) {
       flags |= OPAQUE_SURFACE_MATERIAL_FLAG_REJECT_DECAL;
     }
 
-    if (m_noFade) {
+    if ((m_features & LegacyMaterialFeature::NoFade) != LegacyMaterialFeature::None) {
       flags |= OPAQUE_SURFACE_MATERIAL_FLAG_NO_FADE;
     }
 
+    if ((m_features & LegacyMaterialFeature::Water) != LegacyMaterialFeature::None) {
+      flags |= OPAQUE_SURFACE_MATERIAL_FLAG_WATER;
+    }
     // MHFZ end
 
     float displaceIn = m_displaceIn * getDisplacementFactor();
@@ -680,7 +683,7 @@ private:
     h = XXH64(&m_softBlendFactor, sizeof(m_softBlendFactor), h);
     h = XXH64(&m_alphaBias, sizeof(m_alphaBias), h);
     h = XXH64(&m_normalizeVertexColor, sizeof(m_normalizeVertexColor), h);
-    h = XXH64(&m_rejectDecal, sizeof(m_rejectDecal), h);
+    h = XXH64(&m_features, sizeof(m_features), h);
     // MHFZ end
 
     m_cachedHash = h;
@@ -742,8 +745,7 @@ private:
   float m_softBlendFactor;
   float m_alphaBias;
   bool  m_normalizeVertexColor;
-  bool  m_rejectDecal;
-  bool  m_noFade;
+  LegacyMaterialFeature m_features;
   // MHFZ end
 };
 

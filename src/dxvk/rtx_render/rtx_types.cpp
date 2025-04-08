@@ -81,9 +81,21 @@ namespace dxvk {
       }
       // MHFZ end
 
+      // MHFZ start : only not fully opaque vertex color can be Custom blend
       if (geometryData.boundingBox.canBeCustomBlend == false) {
         removeCategory(InstanceCategories::CustomBlend);
       }
+      // MHFZ end
+
+      // MHFZ start : water feature from legacy material force AnimatedWater category
+      if (legacyMaterialLayer && legacyMaterialLayer->testFeatures(LegacyMaterialFeature::Water)) {
+        setCategory(InstanceCategories::AnimatedWater, true);
+        geometryData.cullMode = VK_CULL_MODE_FRONT_BIT;
+        alphaBlendEnable = false;
+        materialData.alphaBlendEnabled = false;
+        materialData.alphaTestEnabled = false;
+      }
+      // MHFZ end
 
       // Update any categories that require geometry hash
       // MHFZ start : test if legacy materail layer is flagged as a sky

@@ -503,8 +503,10 @@ void resolveVertex<T: IBasePayloadState>(
     // Handle nearly-transparent early out logic and stochastic alpha blend
     bool handleStochasticAlphaBlend = 
       useStochasticAlphaBlend && cb.enableStochasticAlphaBlend &&
-      opacity > cb.resolveTransparencyThreshold && opacity <= cb.resolveStochasticAlphaBlendThreshold;
-
+      opacity > cb.resolveTransparencyThreshold && opacity <= cb.resolveStochasticAlphaBlendThreshold
+      // MHFZ start : Water don't use StochasticAlphaBlend
+        && ((opaqueSurfaceMaterial.flags & OPAQUE_SURFACE_MATERIAL_FLAG_WATER) == 0);
+      // MHFZ end
     isStochasticAlphaBlend = handleStochasticAlphaBlend;
 #else
     unused(isStochasticAlphaBlend);

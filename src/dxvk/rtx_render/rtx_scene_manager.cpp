@@ -1082,8 +1082,7 @@ namespace dxvk {
       float alphaBias = 1.0f;
 
       bool normalizeVertexColor = true;
-      bool rejectDecal = false;
-      bool noFade = false;
+      LegacyMaterialFeature features = LegacyMaterialFeature::None;
       // MHFZ end
 
       constexpr Vector4 kWhiteModeAlbedo = Vector4(0.7f, 0.7f, 0.7f, 1.0f);
@@ -1177,8 +1176,7 @@ namespace dxvk {
             
             emissiveColorConstant = Vector3(1.0f, 1.0f, 1.0f);
           }
-          rejectDecal = legacyMaterialLayer->testFeatures(LegacyMaterialFeature::RejectDecal);
-          noFade = legacyMaterialLayer->testFeatures(LegacyMaterialFeature::NoFade);
+          features = legacyMaterialLayer->features;
           alphaBias = legacyMaterialLayer->alphaBias;
         }
 
@@ -1367,7 +1365,7 @@ namespace dxvk {
         ignoreAlphaChannel, thinFilmEnable, alphaIsThinFilmThickness,
         thinFilmThicknessConstant, samplerIndex, displaceIn, displaceOut, 
         subsurfaceMaterialIndex, isUsingRaytracedRenderTarget,
-        samplerFeedbackStamp, normalIntensity, softBlendFactor, normalizeVertexColor, rejectDecal, alphaBias, noFade
+        samplerFeedbackStamp, normalIntensity, softBlendFactor, normalizeVertexColor, features, alphaBias
       };
 
       if (opaqueSurfaceMaterial.hasValidDisplacement()) {

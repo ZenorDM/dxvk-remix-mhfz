@@ -297,6 +297,9 @@ namespace dxvk {
     if (origin == TextureOrigin::Extend) {
       it->second.features |= LegacyMaterialFeature::NoFade;
     }
+    if (origin == TextureOrigin::Emmodel) {
+      it->second.normalStrenght = -1.0f;
+    }
     m_textures[0].emplace(texture, LegacyTexture { texturehash , albedoPath, normalPath, roughnessPath, metallicPath, heightPath, origin, &(it->second) });
 
   }

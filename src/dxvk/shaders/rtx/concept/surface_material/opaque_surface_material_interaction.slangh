@@ -686,6 +686,13 @@ OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteractionCreate(
   // Apply material modifiers/overrides
   albedo = saturate(albedo * cb.opaqueMaterialArgs.albedoScale + cb.opaqueMaterialArgs.albedoBias);
 
+  // MHFZ start : water only use vertex color alphba as opacity
+  if (opaqueSurfaceMaterial.flags & OPAQUE_SURFACE_MATERIAL_FLAG_WATER)
+  {
+      opacity = pow(saturate(surfaceInteraction.vertexColor.a + opaqueSurfaceMaterial.alphaBias),5);
+  }
+  // MHFZ end
+
   if (cb.opaqueMaterialArgs.enableThinFilmOverride)
   {
     // Note: Thickness override is already normalized to the proper 0-1 range by the CPU to match how the albedo texture alpha channel encodes thickness.
@@ -818,6 +825,13 @@ OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteractionCreate(
   opaqueSurfaceMaterialInteraction.albedo = surface.isMatte ? f16vec3(0) : albedoToAdjustedAlbedo(albedo, metallic, opacity);
   opaqueSurfaceMaterialInteraction.baseReflectivity = surface.isMatte ? f16vec3(0) : calcBaseReflectivity(albedo, metallic, opacity);
    
+  // MHFZ start : water roughness is opacity dependent
+  if (opaqueSurfaceMaterial.flags & OPAQUE_SURFACE_MATERIAL_FLAG_WATER)
+  {
+      roughness = (1.0 - opacity);
+  }
+  // MHFZ end
+
   // Note: Roughness loaded from texture is a perceptual roughness value (for optimal encoding), so this works as intended.
   calcRoughness(roughness, opaqueSurfaceMaterial.anisotropy,
     opaqueSurfaceMaterialInteraction.isotropicRoughness,
@@ -863,6 +877,9 @@ OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteractionCreate(
       float fadeFactor = saturate((rayInteraction.coneRadius) / (cb.nearFadeDistance + 0.0001));
       opaqueSurfaceMaterialInteraction.opacity = saturate(opaqueSurfaceMaterialInteraction.opacity * mix(0.0, 1.0, pow(fadeFactor,5)));
   }
+
+
+
   // MHFZ end
   return opaqueSurfaceMaterialInteraction;
 }
