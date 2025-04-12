@@ -232,13 +232,16 @@ namespace dxvk {
     const auto mode = fallbackLightMode();
 
     // MHFZ start : use area data
-    {
-      m_fallbackLight.emplace(RtDistantLight(
-        // Note: Distant light direction must be normalized, but a non-normalized direction is provided as an option.
-        normalize(area.lightDirection),
-        5.0f * kDegreesToRadians / 2.0f,
-        area.lightRadiance
-      ));
+     {
+      const auto oldFallbackLightPresent = m_fallbackLight.has_value();
+      if (!oldFallbackLightPresent) {
+        m_fallbackLight.emplace(RtDistantLight(
+          // Note: Distant light direction must be normalized, but a non-normalized direction is provided as an option.
+          normalize(area.lightDirection),
+          5.0f * kDegreesToRadians / 2.0f,
+          area.lightRadiance
+        ));
+      }
     }
     // MHFZ end
 

@@ -2960,25 +2960,32 @@ namespace dxvk {
         ImGui::Text("Time %u",areaManager.getTime());
         ImGui::Text(areaManager.getCurrentAreaName());
         AreaData& area = areaManager.getCurrentAreaData();
+        bool areaDirty = false;
         if (ImGui::TreeNode("Light")) {
-          ImGui::SliderFloat3("Ligh Direction", area.lightDirection.data, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-          ImGui::SliderFloat3("Ligh Radiance", area.lightRadiance.data, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+          areaDirty |= ImGui::SliderFloat3("Ligh Direction", area.lightDirection.data, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+          areaDirty |= ImGui::SliderFloat3("Ligh Radiance", area.lightRadiance.data, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 
           ImGui::TreePop();
         }
         if (ImGui::TreeNode("Volumetric")) {
-          ImGui::DragFloat3("Transmittance Color", area.transmittanceColor.data, 0.01f, 0.0f, MaxTransmittanceValue, "%.3f");
-          ImGui::DragFloat("Transmittance Measurement Distance", &area.transmittanceMeasurementDistanceMeters, 0.25f, 0.0f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-          ImGui::DragFloat3("Single Scattering Albedo", area.singleScatteringAlbedo.data, 0.01f, 0.0f, 1.0f, "%.3f");
+          areaDirty |= ImGui::DragFloat3("Transmittance Color", area.transmittanceColor.data, 0.01f, 0.0f, MaxTransmittanceValue, "%.3f");
+          areaDirty |= ImGui::DragFloat("Transmittance Measurement Distance", &area.transmittanceMeasurementDistanceMeters, 0.25f, 0.0f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+          areaDirty |= ImGui::DragFloat3("Single Scattering Albedo", area.singleScatteringAlbedo.data, 0.01f, 0.0f, 1.0f, "%.3f");
 
-          ImGui::DragFloat("Anisotropy", &area.anisotropy, 0.01f, -.99f, .99f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-          ImGui::Checkbox("Enable Heterogeneous Fog", &area.enableHeterogeneousFog);
+          areaDirty |= ImGui::DragFloat("Anisotropy", &area.anisotropy, 0.01f, -.99f, .99f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+          areaDirty |= ImGui::Checkbox("Enable Heterogeneous Fog", &area.enableHeterogeneousFog);
 
-          ImGui::DragFloat("Noise Field Spatial Frequency", &area.noiseFieldSpatialFrequency, 0.01f, 0.0f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-          ImGui::DragInt("Noise Field Number of Octaves", &area.noiseFieldOctaves, 1.f, 0, 10);
-          ImGui::DragFloat("Noise Field Density Scale", &area.noiseFieldDensityScale, 0.01f, 0.0f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+          areaDirty |= ImGui::DragFloat("Noise Field Spatial Frequency", &area.noiseFieldSpatialFrequency, 0.01f, 0.0f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+          areaDirty |= ImGui::DragInt("Noise Field Number of Octaves", &area.noiseFieldOctaves, 1.f, 0, 10);
+          areaDirty |= ImGui::DragFloat("Noise Field Density Scale", &area.noiseFieldDensityScale, 0.01f, 0.0f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
           ImGui::TreePop();
         }
+
+        if (areaDirty) {
+          ctx->getCommonObjects()->getSceneManager().getLightManager().resetLightFallback();
+        }
+
+
         ImGui::TreePop();
       }
 

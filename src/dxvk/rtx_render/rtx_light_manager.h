@@ -88,6 +88,9 @@ public:
 
   // MHFZ start : pass current AreaData
   void prepareSceneData(Rc<DxvkContext> ctx, CameraManager const& cameraManager, const AreaData& area);
+  void resetLightFallback() {
+    m_fallbackLight.reset();
+  }
   // MHFZ end
 
   void addGameLight(D3DLIGHTTYPE type, const RtLight& light);

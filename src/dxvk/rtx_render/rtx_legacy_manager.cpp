@@ -306,6 +306,9 @@ namespace dxvk {
     if (origin == TextureOrigin::Extend || origin == TextureOrigin::Parts || origin == TextureOrigin::NPC) {
       it->second.features |= LegacyMaterialFeature::NoFade;
     }
+    if (origin == TextureOrigin::Extend || origin == TextureOrigin::Parts || origin == TextureOrigin::NPC || origin == TextureOrigin::Effect) {
+      it->second.features |= LegacyMaterialFeature::RejectDecal;
+    }
     if (origin == TextureOrigin::Emmodel) {
       it->second.normalStrenght = -1.0f;
       it->second.features |= LegacyMaterialFeature::BackFaceCulling;
