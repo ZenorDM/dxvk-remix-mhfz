@@ -34,6 +34,9 @@
 #include "math.h"
 #include "rtx_lights.h"
 #include "rtx_intersection_test.h"
+// MHFZ start : required include
+#include "rtx_area_manager.h"
+// MHFZ end
 
 /*  Light Manager (blurb)
 * 
@@ -216,7 +219,9 @@ namespace dxvk {
     }
   }
 
-  void LightManager::prepareSceneData(Rc<DxvkContext> ctx, CameraManager const& cameraManager) {
+  // MHFZ start : pass current AreaData
+  void LightManager::prepareSceneData(Rc<DxvkContext> ctx, CameraManager const& cameraManager, const AreaData& area) {
+  // MHFZ end
     ScopedCpuProfileZone();
     // Note: Early outing in this function (via returns) should be done carefully (or not at all ideally) as it may skip important
     // logic such as swapping the current/previous frame light buffer, updating light count information or allocating/updating the
@@ -225,6 +230,17 @@ namespace dxvk {
     // Create or remove a fallback light depending on if any lights are present in the game and the fallback light mode
 
     const auto mode = fallbackLightMode();
+
+    // MHFZ start : use area data
+    {
+      m_fallbackLight.emplace(RtDistantLight(
+        // Note: Distant light direction must be normalized, but a non-normalized direction is provided as an option.
+        normalize(area.lightDirection),
+        5.0f * kDegreesToRadians / 2.0f,
+        area.lightRadiance
+      ));
+    }
+    // MHFZ end
 
     if (
       mode == FallbackLightMode::Always ||

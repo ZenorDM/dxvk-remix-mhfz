@@ -50,6 +50,7 @@
 // MHFZ start: required include
 #include "../d3d9/d3d9_shaders_hasher.h"
 #include "rtx_render/rtx_legacy_manager.h"
+#include "rtx_render/rtx_area_manager.h"
 // MHFZ end
 
 namespace dxvk {
@@ -646,6 +647,10 @@ namespace dxvk {
     LegacyManager& getLegacyManager() {
       return m_legacyManager;
     }
+
+    AreaManager& getAreaManager() {
+      return m_areaManager;
+    }
     // MHFZ end
 
   private:
@@ -688,7 +693,8 @@ namespace dxvk {
 
     // MHFZ start : cutom managers
     ShadersHasher   m_shaderHasher;
-    LegacyManager                   m_legacyManager;
+    LegacyManager                 m_legacyManager;
+    AreaManager                   m_areaManager;
     // MHFZ end
   };
   

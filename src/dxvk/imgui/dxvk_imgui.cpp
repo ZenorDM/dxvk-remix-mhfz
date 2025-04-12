@@ -2858,6 +2858,34 @@ namespace dxvk {
       }
 
       ImGui::SliderFloat("Near fade distance", &RtxOptions::Get()->nearFadeDistanceObject(), 0.0f, 1.0f);
+      static constexpr float MaxTransmittanceValue = 1.f - 1.f / 255.f;
+      if (ImGui::TreeNode("Area")) {
+        DxvkDevice* device = ctx->getCommonObjects()->getSceneManager().device();
+        AreaManager& areaManager = device->getAreaManager();
+        ImGui::Text("Time %u",areaManager.getTime());
+        ImGui::Text(areaManager.getCurrentAreaName());
+        AreaData& area = areaManager.getCurrentAreaData();
+        if (ImGui::TreeNode("Light")) {
+          ImGui::SliderFloat3("Ligh Direction", area.lightDirection.data, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+          ImGui::SliderFloat3("Ligh Radiance", area.lightRadiance.data, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+          ImGui::TreePop();
+        }
+        if (ImGui::TreeNode("Volumetric")) {
+          ImGui::DragFloat3("Transmittance Color", area.transmittanceColor.data, 0.01f, 0.0f, MaxTransmittanceValue, "%.3f");
+          ImGui::DragFloat("Transmittance Measurement Distance", &area.transmittanceMeasurementDistanceMeters, 0.25f, 0.0f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+          ImGui::DragFloat3("Single Scattering Albedo", area.singleScatteringAlbedo.data, 0.01f, 0.0f, 1.0f, "%.3f");
+
+          ImGui::DragFloat("Anisotropy", &area.anisotropy, 0.01f, -.99f, .99f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+          ImGui::Checkbox("Enable Heterogeneous Fog", &area.enableHeterogeneousFog);
+
+          ImGui::DragFloat("Noise Field Spatial Frequency", &area.noiseFieldSpatialFrequency, 0.01f, 0.0f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+          ImGui::DragInt("Noise Field Number of Octaves", &area.noiseFieldOctaves, 1.f, 0, 10);
+          ImGui::DragFloat("Noise Field Density Scale", &area.noiseFieldDensityScale, 0.01f, 0.0f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+          ImGui::TreePop();
+        }
+        ImGui::TreePop();
+      }
 
       if (ImGui::TreeNode("Shaders")) {
         DxvkDevice* device = ctx->getCommonObjects()->getSceneManager().device();

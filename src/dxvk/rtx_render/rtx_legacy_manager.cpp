@@ -299,6 +299,7 @@ namespace dxvk {
     }
     if (origin == TextureOrigin::Emmodel) {
       it->second.normalStrenght = -1.0f;
+      it->second.features |= LegacyMaterialFeature::BackFaceCulling;
     }
     m_textures[0].emplace(texture, LegacyTexture { texturehash , albedoPath, normalPath, roughnessPath, metallicPath, heightPath, origin, &(it->second) });
 

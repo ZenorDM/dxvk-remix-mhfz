@@ -328,6 +328,9 @@ dxvk_src = files([
   'rtx_render/rtx_dust_particles.h',
   'rtx_render/rtx_legacy_manager.cpp',
   'rtx_render/rtx_legacy_manager.h',
+  'rtx_render/rtx_area_manager.cpp',
+  'rtx_render/rtx_area_manager.h',
+  
 
   'rtx_render/rtx_constants.h',
 

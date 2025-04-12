@@ -58,6 +58,13 @@
 #pragma fenv_access (on)
 #endif
 
+// MHFZ start : struct pass by bridge contain all gathered memory value from game
+struct MHFZGameData : public IMHFZGameData {
+  uint32_t areaID;
+  uint32_t time;
+};
+// MHFZ end
+
 namespace dxvk {
   static const bool s_explicitFlush = (env::getEnvVar("DXVK_EXPLICIT_FLUSH") == "1");
 
@@ -3690,7 +3697,7 @@ namespace dxvk {
 
     if (unlikely(ShouldRecord()))
       return S_OK;
-    
+
     m_dxvkDevice->getLegacyManager().pushToLoad(hash, GetCommonTexture(texture));
 
     return S_OK;
@@ -3698,6 +3705,13 @@ namespace dxvk {
   
   HRESULT STDMETHODCALLTYPE D3D9DeviceEx::DestroyBaseTexture(IDirect3DBaseTexture9* texture) {
     m_dxvkDevice->getLegacyManager().destroyTexture(GetCommonTexture(texture));
+    return S_OK;
+  }
+  // get all data gathered from mhfo-hd.dll
+  HRESULT STDMETHODCALLTYPE D3D9DeviceEx::SendGameData(CONST IMHFZGameData* gameData) {
+    const MHFZGameData* data = static_cast<const MHFZGameData*>(gameData);
+    m_dxvkDevice->getAreaManager().setArea(data->areaID);
+    m_dxvkDevice->getAreaManager().setTime(data->time);
     return S_OK;
   }
   // MHFZ end

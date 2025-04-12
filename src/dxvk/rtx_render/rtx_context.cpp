@@ -1184,7 +1184,10 @@ namespace dxvk {
     constants.roughnessDemodulationOffset = m_common->metaDemodulate().demodulateRoughnessOffset();
     
     const RtxGlobalVolumetrics& globalVolumetrics = getCommonObjects()->metaGlobalVolumetrics();
-    constants.volumeArgs = globalVolumetrics.getVolumeArgs(cameraManager, getSceneManager().getFogState(), enablePortalVolumes);
+    // MHFZ start : send areaData for fill volumetric accordingly
+    const AreaData& area = m_device->getAreaManager().getCurrentAreaData();
+    constants.volumeArgs = globalVolumetrics.getVolumeArgs(cameraManager, getSceneManager().getFogState(), enablePortalVolumes, area);
+    // MHFZ end
     constants.startInMediumMaterialIndex = getSceneManager().getStartInMediumMaterialIndex();
     RtxOptions::Get()->opaqueMaterialOptions.fillShaderParams(constants.opaqueMaterialArgs);
     RtxOptions::Get()->translucentMaterialOptions.fillShaderParams(constants.translucentMaterialArgs);

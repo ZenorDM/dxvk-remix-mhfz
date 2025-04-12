@@ -623,9 +623,9 @@ namespace dxvk {
         newDrawCallState.transformData.objectToView = viewMatrix * newDrawCallState.transformData.objectToWorld;
         instanceId = processDrawCallState(ctx, newDrawCallState, overrideMaterialData);
       } else {
-      // MHFZ end
-        instanceId = processDrawCallState(ctx, input, overrideMaterialData);
-      }
+          // MHFZ end
+          instanceId = processDrawCallState(ctx, input, overrideMaterialData);
+        }
       // MHFZ start : if the mesh is a custom blend we can hide hole by render an opaque mesh with a hard alpha cut
       if (input.testCategoryFlags(InstanceCategories::CustomBlend) && input.geometryData.boundingBox.canBeCustomBlend && legacyMeshLayer && legacyMeshLayer->testFeatures(LegacyMeshFeature::FillHole)) {
         static DrawCallState newDrawCallState;
@@ -1640,7 +1640,11 @@ namespace dxvk {
 
     // Call on the other managers to prepare their GPU data for the current scene
     m_accelManager.prepareSceneData(ctx, execBarriers, m_instanceManager);
-    m_lightManager.prepareSceneData(ctx, m_cameraManager);
+    // MHFZ start : update area data and send area data to light manager
+    m_device->getAreaManager().update();
+    const AreaData& area = m_device->getAreaManager().getCurrentAreaData();
+    m_lightManager.prepareSceneData(ctx, m_cameraManager, area);
+    // MHFZ end
 
     // Build the TLAS
     m_accelManager.buildTlas(ctx);

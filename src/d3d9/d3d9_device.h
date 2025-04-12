@@ -557,9 +557,10 @@ namespace dxvk {
 
     HRESULT STDMETHODCALLTYPE CreateQuery(D3DQUERYTYPE Type, IDirect3DQuery9** ppQuery);
 
-    // MHFZ start: custom IDirect3DDevice9 methods to get and destroy ovewrite textures
+    // MHFZ start: custom IDirect3DDevice9 methods
     HRESULT STDMETHODCALLTYPE SendBaseTextureHash(UINT hash, IDirect3DBaseTexture9* texture);
     HRESULT STDMETHODCALLTYPE DestroyBaseTexture(IDirect3DBaseTexture9* texture);
+    HRESULT STDMETHODCALLTYPE SendGameData(CONST IMHFZGameData* gameData);
     // MHFZ end
 
     // Ex Methods

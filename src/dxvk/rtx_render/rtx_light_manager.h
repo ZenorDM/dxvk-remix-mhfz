@@ -41,6 +41,9 @@ struct RaytraceArgs;
 namespace dxvk {
 class DxvkContext;
 class DxvkDevice;
+// MHFZ start : required forward declaration
+struct AreaData;
+// MHFZ end
 
 struct LightRange {
   uint32_t offset;
@@ -83,7 +86,9 @@ public:
 
   void dynamicLightMatching();
 
-  void prepareSceneData(Rc<DxvkContext> ctx, CameraManager const& cameraManager);
+  // MHFZ start : pass current AreaData
+  void prepareSceneData(Rc<DxvkContext> ctx, CameraManager const& cameraManager, const AreaData& area);
+  // MHFZ end
 
   void addGameLight(D3DLIGHTTYPE type, const RtLight& light);
   void addLight(const RtLight& light, const RtLightAntiCullingType antiCullingType, const XXH64_hash_t lightToReplace = kEmptyHash);

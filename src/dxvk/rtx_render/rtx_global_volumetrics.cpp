@@ -35,6 +35,9 @@
 #include "dxvk_scoped_annotation.h"
 #include "rtx_context.h"
 #include "rtx_imgui.h"
+// MHFZ start : required include
+#include "rtx_area_manager.h"
+// MHFZ end
 
 namespace dxvk {
 
@@ -497,15 +500,21 @@ namespace dxvk {
     return approximateDensity < fogDensityThrehold;
   }
 
-  VolumeArgs RtxGlobalVolumetrics::getVolumeArgs(CameraManager const& cameraManager, FogState const& fogState, bool enablePortalVolumes) const {
+  // MHFZ start : pass current AreaData
+  VolumeArgs RtxGlobalVolumetrics::getVolumeArgs(CameraManager const& cameraManager, FogState const& fogState, bool enablePortalVolumes, const AreaData& area) const {
+  // MHFZ end
     // Calculate the volumetric parameters from options and the fixed function fog state
 
     // Note: Volumetric transmittance color option is in gamma space, so must be converted to linear for usage in the volumetric system.
-    Vector3 transmittanceColor { sRGBGammaToLinear(m_transmittanceColor) };
+    // MHFZ start : use area data
+    Vector3 transmittanceColor { sRGBGammaToLinear(area.transmittanceColor) };
+    // MHFZ end
 
     // Note: Fall back to usual default in cases such as the "none" D3D fog mode, no fog remapping specified, or invalid values in the fog mode derivation
     // (such as dividing by zero).
-    float transmittanceMeasurementDistance = m_transmittanceMeasurementDistanceMeters * RtxOptions::Get()->getMeterToWorldUnitScale();
+    // MHFZ start : use area data
+    float transmittanceMeasurementDistance = area.transmittanceMeasurementDistanceMeters * RtxOptions::Get()->getMeterToWorldUnitScale();
+    // MHFZ end
     Vector3 multiScatteringEstimate = Vector3();
 
     // Todo: Make this configurable in the future as this threshold was created specifically for Portal RTX's underwater fixed function fog.
@@ -580,8 +589,9 @@ namespace dxvk {
       -log(transmittanceColor.y) / transmittanceMeasurementDistance,
       -log(transmittanceColor.z) / transmittanceMeasurementDistance
     };
-    Vector3 const volumetricScatteringCoefficient { volumetricAttenuationCoefficient * m_singleScatteringAlbedo };
-
+    // MHFZ start : use area data
+    Vector3 const volumetricScatteringCoefficient { volumetricAttenuationCoefficient * area.singleScatteringAlbedo };
+    // MHFZ end
     const RtCamera& mainCamera = cameraManager.getMainCamera();
 
     // Set Volumetric Arguments
@@ -622,13 +632,17 @@ namespace dxvk {
     volumeArgs.maxFilteredRadianceU = 1.f - volumeArgs.minFilteredRadianceU;
     volumeArgs.multiScatteringEstimate = multiScatteringEstimate;
     volumeArgs.enableReferenceMode = enableReferenceMode();
-    volumeArgs.volumetricFogAnisotropy = anisotropy();
+    // MHFZ start : use area data
+    volumeArgs.volumetricFogAnisotropy = area.anisotropy;
 
-    volumeArgs.enableNoiseFieldDensity = enableHeterogeneousFog();
+    volumeArgs.enableNoiseFieldDensity = area.enableHeterogeneousFog;
+    // MHFZ end
     volumeArgs.noiseFieldSubStepSize = noiseFieldSubStepSizeMeters() * RtxOptions::Get()->getMeterToWorldUnitScale();
-    volumeArgs.noiseFieldSpatialFrequency = noiseFieldSpatialFrequency();
-    volumeArgs.noiseFieldOctaves = noiseFieldOctaves();
-    volumeArgs.noiseFieldDensityScale = noiseFieldDensityScale();
+    // MHFZ start : use area data
+    volumeArgs.noiseFieldSpatialFrequency = area.noiseFieldSpatialFrequency;
+    volumeArgs.noiseFieldOctaves = area.noiseFieldOctaves;
+    volumeArgs.noiseFieldDensityScale = area.noiseFieldDensityScale;
+    // MHFZ end
     volumeArgs.depthOffset = depthOffset();
 
     const float invertedWorld = atmosphereInverted() ? -1.f : 1.f;

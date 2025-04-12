@@ -28,6 +28,9 @@
 #include "rtx_camera_manager.h"
 
 namespace dxvk {
+  // MHFZ start : required forward declaration
+  struct AreaData;
+  // MHFZ end
 
   class RtxGlobalVolumetrics : public CommonDeviceObject, public RtxPass {
 
@@ -204,7 +207,9 @@ namespace dxvk {
     RtxGlobalVolumetrics(DxvkDevice* device);
     ~RtxGlobalVolumetrics() = default;
 
-    VolumeArgs getVolumeArgs(CameraManager const& cameraManager, FogState const& fogState, bool enablePortalVolumes) const;
+    // MHFZ start : pass current AreaData
+    VolumeArgs getVolumeArgs(CameraManager const& cameraManager, FogState const& fogState, bool enablePortalVolumes, const AreaData& area) const;
+    // MHFZ end
 
     void dispatch(class RtxContext* ctx, const Resources::RaytracingOutput& rtOutput, uint32_t numActiveFroxelVolumes);
     
