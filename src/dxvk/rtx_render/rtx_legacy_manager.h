@@ -22,6 +22,9 @@ namespace dxvk {
     Stage,
     Emmodel,
     Extend,
+    NPC,
+    Parts,
+    Effect,
   };
 
   enum class LegacyMaterialFeature : uint16_t {

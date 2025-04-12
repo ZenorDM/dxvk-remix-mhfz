@@ -292,9 +292,18 @@ namespace dxvk {
       else if (path.find("extend") != std::string::npos) {
         origin = TextureOrigin::Extend;
       }
+      else if (path.find("npc") != std::string::npos) {
+        origin = TextureOrigin::NPC;
+      }
+      else if (path.find("parts") != std::string::npos) {
+        origin = TextureOrigin::Parts;
+      }
+      else if (path.find("effect") != std::string::npos) {
+        origin = TextureOrigin::Effect;
+      }
     }
     auto [it,_] = m_legacyMaterialsLayer.try_emplace(texturehash, LegacyMaterialLayer {});
-    if (origin == TextureOrigin::Extend) {
+    if (origin == TextureOrigin::Extend || origin == TextureOrigin::Parts || origin == TextureOrigin::NPC) {
       it->second.features |= LegacyMaterialFeature::NoFade;
     }
     if (origin == TextureOrigin::Emmodel) {

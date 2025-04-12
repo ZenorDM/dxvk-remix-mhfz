@@ -2138,6 +2138,9 @@ namespace dxvk {
     constexpr const char* Stage = "stage";
     constexpr const char* Emmodel = "emmodel";
     constexpr const char* Extend = "extend";
+    constexpr const char* NPC = "npc";
+    constexpr const char* Parts = "parts";
+    constexpr const char* Effect = "effect";
     // MHFZ end
   } // anonymous namespace
 
@@ -2165,6 +2168,9 @@ namespace dxvk {
     bool isStageFiltered = std::string_view { uniqueId } == Stage;
     bool isEmmodelFiltered = std::string_view { uniqueId } == Emmodel;
     bool isExtendFiltered = std::string_view { uniqueId } == Extend;
+    bool isNpcFiltered = std::string_view { uniqueId } == NPC;
+    bool isPartsFiltered = std::string_view { uniqueId } == Parts;
+    bool isEffectFiltered = std::string_view { uniqueId } == Effect;
     // MHFZ end
 
     const ImVec2 availableSize = ImGui::GetContentRegionAvail();
@@ -2209,6 +2215,21 @@ namespace dxvk {
             continue;
           }
         }
+        else if (isNpcFiltered) {
+          if (texImgui.origin != TextureOrigin::NPC) {
+            continue;
+          }
+        }
+        else if (isPartsFiltered) {
+          if (texImgui.origin != TextureOrigin::Parts) {
+            continue;
+          }
+        }
+        else if (isEffectFiltered) {
+          if (texImgui.origin != TextureOrigin::Effect) {
+            continue;
+          }
+        }
         else {
         // MHFZ end
           for (const auto rtxOption : rtxTextureOptions) {
@@ -2222,12 +2243,18 @@ namespace dxvk {
       }
 
       // MHFZ start
-      if (!isStageFiltered && !isEmmodelFiltered && !isExtendFiltered) {
+      if (!isStageFiltered && !isEmmodelFiltered && !isExtendFiltered && !isNpcFiltered && !isPartsFiltered && !isEffectFiltered) {
       // MHFZ end
         if (legacyTextureGuiShowAssignedOnly()) {
           if (std::string_view { uniqueId } == Uncategorized) {
             // MHFZ start
-            if (textureHasSelection || texImgui.origin == TextureOrigin::Stage || texImgui.origin == TextureOrigin::Emmodel || texImgui.origin == TextureOrigin::Extend) {
+            if (textureHasSelection 
+                || texImgui.origin == TextureOrigin::Stage 
+                || texImgui.origin == TextureOrigin::Emmodel 
+                || texImgui.origin == TextureOrigin::Extend
+                || texImgui.origin == TextureOrigin::NPC
+                || texImgui.origin == TextureOrigin::Parts
+                || texImgui.origin == TextureOrigin::Effect) {
             // MHFZ end
               continue; // Currently handling the uncategorized texture tab and current texture is assigned to a category -> skip
             }
@@ -2467,6 +2494,9 @@ namespace dxvk {
       bool isStageFiltered = std::string_view { uniqueId } == Stage;
       bool isEmmodelFiltered = std::string_view { uniqueId } == Emmodel;
       bool isExtendFiltered = std::string_view { uniqueId } == Extend;
+      bool isNPCFiltered = std::string_view { uniqueId } == NPC;
+      bool isPartsFiltered = std::string_view { uniqueId } == Parts;
+      bool isEffectFiltered = std::string_view { uniqueId } == Effect;
       // MHFZ end
 
       const fast_unordered_set* selected = nullptr;
@@ -2498,6 +2528,21 @@ namespace dxvk {
         } 
         else if (isExtendFiltered) {
           if (texImgui.origin != TextureOrigin::Extend) {
+            continue;
+          }
+        }
+        else if (isNPCFiltered) {
+          if (texImgui.origin != TextureOrigin::NPC) {
+            continue;
+          }
+        }
+        else if (isPartsFiltered) {
+          if (texImgui.origin != TextureOrigin::Parts) {
+            continue;
+          }
+        }
+        else if (isEffectFiltered) {
+          if (texImgui.origin != TextureOrigin::Effect) {
             continue;
           }
         }
@@ -2678,7 +2723,14 @@ namespace dxvk {
 
         auto showLegacyGui = [&](const char* uniqueId, const char* displayName, const char* description) {
           // MHFZ start
-          const bool countOnlySelected = legacyTextureGuiShowAssignedOnly() && !(strcmp(uniqueId, Uncategorized) == 0) && !(strcmp(uniqueId, Stage) == 0) && !(strcmp(uniqueId, Emmodel) == 0) && !(strcmp(uniqueId, Extend) == 0);
+          const bool countOnlySelected = legacyTextureGuiShowAssignedOnly() 
+            && !(strcmp(uniqueId, Uncategorized) == 0) 
+            && !(strcmp(uniqueId, Stage) == 0) 
+            && !(strcmp(uniqueId, Emmodel) == 0)
+            && !(strcmp(uniqueId, Extend) == 0)
+            && !(strcmp(uniqueId, NPC) == 0)
+            && !(strcmp(uniqueId, Parts) == 0)
+            && !(strcmp(uniqueId, Effect) == 0);
           // MHFZ end
           const auto height = calculateTextureCategoryHeight(countOnlySelected, uniqueId, numThumbnailsPerRow, thumbnailSize);
           if (!height.has_value()) {
@@ -2714,6 +2766,9 @@ namespace dxvk {
           showLegacyGui(Stage, "Stage", "Textures that are under stage folder");
           showLegacyGui(Emmodel, "Emmodel", "Textures that are under emmodel folder");
           showLegacyGui(Extend, "Extend", "Textures that are under extend folder");
+          showLegacyGui(NPC, "NPC", "Textures that are under npc folder");
+          showLegacyGui(Parts, "Parts", "Textures that are under parts folder");
+          showLegacyGui(Effect, "Effect", "Textures that are under effect folder");
           // MHFZ end
           spacing();
         }
