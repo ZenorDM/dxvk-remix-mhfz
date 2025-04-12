@@ -22,10 +22,14 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <sstream>
 #include <vector>
 
 #include "./com/com_include.h"
+
+#define WIDEN_MACRO_LITERAL2(x) L ## x
+#define WIDEN_MACRO_LITERAL(x) WIDEN_MACRO_LITERAL2(x)
 
 namespace dxvk::str {
   
@@ -66,4 +70,12 @@ namespace dxvk::str {
   std::string stripNonAscii(const std::string& input);
 
   std::string formatBytes(size_t bytes);
+
+  // Note: Constructs a string view including the null terminator unlike the standard library's std::basic_string_view
+  // which does not include the null terminator. This makes it easier to work with APIs that expect null terminated strings
+  // using string views.
+  template<typename T, std::size_t L>
+  constexpr auto string_viewz(const T(&t)[L]) {
+    return std::basic_string_view<T>(t, L);
+  }
 }
