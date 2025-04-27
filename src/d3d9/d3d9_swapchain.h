@@ -81,10 +81,10 @@ namespace dxvk {
     HRESULT STDMETHODCALLTYPE GetDisplayModeEx(D3DDISPLAYMODEEX* pMode, D3DDISPLAYROTATION* pRotation);
 
     // NV-DXVK start
-   virtual HRESULT Reset(
-            D3DPRESENT_PARAMETERS* pPresentParams,
-            D3DDISPLAYMODEEX* pFullscreenDisplayMode,
-            bool forceWindowReset = false);
+    virtual HRESULT Reset(
+             D3DPRESENT_PARAMETERS* pPresentParams,
+             D3DDISPLAYMODEEX* pFullscreenDisplayMode,
+             bool forceWindowReset = false);
     // NV-DXVK end
 
     HRESULT WaitForVBlank();
@@ -130,7 +130,7 @@ namespace dxvk {
       Gamma = 1,
     };
 
-    
+
     struct WindowState {
       LONG style   = 0;
       LONG exstyle = 0;
@@ -153,7 +153,7 @@ namespace dxvk {
     Rc<hud::Hud>              m_hud;
 
     std::vector<Com<D3D9Surface, false>> m_backBuffers;
-    
+
     // NV-DXVK begin: Uninitialized read fix
     // Note: Initialized to a size of 0 to prevent uninitialized reads when these are first used.
     // Not a perfect solution (ideally an optional would be more useful to say they haven't been
@@ -171,6 +171,10 @@ namespace dxvk {
     uint64_t                  m_frameId           = D3D9DeviceEx::MaxFrameLatency;
     uint32_t                  m_frameLatencyCap   = 0;
     Rc<sync::Fence>           m_frameLatencySignal;
+
+    // MHFZ start 
+    bool                      m_hookRegistered = false;
+    // MHFZ end
 
     bool                      m_dirty    = true;
     bool                      m_vsync    = true;
@@ -191,7 +195,7 @@ namespace dxvk {
     double                    m_displayRefreshRate = 0.0;
 
     void PresentImage(UINT PresentInterval);
-    
+
     void SubmitPresent(const vk::PresenterSync& Sync, uint32_t FrameId, uint32_t imageIndex);
 
     void SynchronizePresent();
@@ -221,11 +225,11 @@ namespace dxvk {
     uint32_t PickFormats(
             D3D9Format                Format,
             VkSurfaceFormatKHR*       pDstFormats);
-    
+
     uint32_t PickPresentModes(
             BOOL                      Vsync,
             VkPresentModeKHR*         pDstModes);
-    
+
     uint32_t PickImageCount(
             UINT                      Preferred);
 
@@ -237,13 +241,13 @@ namespace dxvk {
     HRESULT EnterFullscreenMode(
             D3DPRESENT_PARAMETERS*  pPresentParams,
       const D3DDISPLAYMODEEX*       pFullscreenDisplayMode);
-    
+
     HRESULT LeaveFullscreenMode();
-    
+
     HRESULT ChangeDisplayMode(
             D3DPRESENT_PARAMETERS*  pPresentParams,
       const D3DDISPLAYMODEEX*       pFullscreenDisplayMode);
-    
+
     HRESULT RestoreDisplayMode(HMONITOR hMonitor);
 
     bool    UpdatePresentRegion(const RECT* pSourceRect, const RECT* pDestRect);
@@ -295,7 +299,7 @@ namespace dxvk {
       const RGNDATA* pDirtyRegion,
             DWORD    dwFlags) override;
 
-// NV-DXVK start: external API
+    // NV-DXVK start: external API
     VkImage GetVkImage(uint32_t Index) const {
       D3D9DeviceLock lock = m_parent->LockDevice();
       if (Index < m_backBuffers.size()) {
@@ -311,7 +315,7 @@ namespace dxvk {
     VkSemaphore GetFrameCompleteVkSemaphore() const {
       return m_frameResumeSemaphore->handle();
     }
-// NV-DXVK end
+    // NV-DXVK end
   };
 
 }
