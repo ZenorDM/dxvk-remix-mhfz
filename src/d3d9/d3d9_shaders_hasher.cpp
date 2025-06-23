@@ -93,6 +93,9 @@ namespace dxvk {
           shaderDesc.constantVs.emplace(1);
 
         }
+        if (line.find("gDepthView") != std::string::npos) {
+          shaderDesc.constantVs.emplace(186);
+        }
       }
       file.close();
     } else {

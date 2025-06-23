@@ -831,7 +831,9 @@ namespace dxvk {
   }
 
   void ImGUI::updateQuickActions(const Rc<DxvkContext>& ctx) {
-#ifdef REMIX_DEVELOPMENT
+    //MHFZ start : for now allow quick action on release
+//#ifdef REMIX_DEVELOPMENT
+    //MHFZ end
     enum RtxQuickAction : uint32_t {
       kOriginal = 0,
       kRtxOnEnhanced,
@@ -870,7 +872,7 @@ namespace dxvk {
         break;
       }
     }
-#endif
+//#endif
   }
 
 
@@ -1033,6 +1035,19 @@ namespace dxvk {
 
           ImGui::EndTabItem();
         }
+
+        // MHFZ start : add a new tab to settings tabs to control the new cutom camera
+        if (ImGui::BeginTabItem("Monster Hunter Frontier Z", nullptr, tab_item_flags)) {
+
+          ImGui::Checkbox("Enable Custom Camera", &RtxOptions::Get()->customCameraEnableObject());
+          if (RtxOptions::Get()->customCameraEnable()){
+            ImGui::SliderInt("Camera distance", &RtxOptions::Get()->customCameraDistanceObject(), 300, 1000);
+            ImGui::SliderInt("Camera horizontal speed", &RtxOptions::Get()->customCameraXSpeedObject(), 1, 20);
+            ImGui::SliderInt("Camera vertical speed", &RtxOptions::Get()->customCameraYSpeedObject(), 1, 20);
+          }
+          ImGui::EndTabItem();
+        }
+        // MHFZ end
 
         ImGui::EndTabBar();
       }
@@ -1982,6 +1997,11 @@ namespace dxvk {
                   drawFeature("BackFaceCulling", LegacyMaterialFeature::BackFaceCulling);
                   drawFeature("NoFade", LegacyMaterialFeature::NoFade);
                   drawFeature("Water", LegacyMaterialFeature::Water);
+                  drawFeature("Particle", LegacyMaterialFeature::Particle);
+                  drawFeature("ParticleIgnoreLight", LegacyMaterialFeature::ParticleIgnoreLight);
+                  drawFeature("Decals", LegacyMaterialFeature::Decals);
+                  drawFeature("IgnoreOriginal", LegacyMaterialFeature::IgnoreOriginal);
+                  drawFeature("RainTexture", LegacyMaterialFeature::RainTexture);
 
                   ImGui::TreePop();
                 }
@@ -2950,8 +2970,11 @@ namespace dxvk {
         DxvkDevice* device = ctx->getCommonObjects()->getSceneManager().device();
         ShadersHasher& shaderHasher = device->getShaderHasher();
         shaderHasher.saveProfil();
+        AreaManager& areaManager = device->getAreaManager();
+        areaManager.save();
       }
 
+      ImGui::Checkbox("Un Hide Mesh", &RtxOptions::Get()->unHideMeshObject());
       ImGui::SliderFloat("Near fade distance", &RtxOptions::Get()->nearFadeDistanceObject(), 0.0f, 1.0f);
       static constexpr float MaxTransmittanceValue = 1.f - 1.f / 255.f;
       if (ImGui::TreeNode("Area")) {
@@ -2962,9 +2985,84 @@ namespace dxvk {
         AreaData& area = areaManager.getCurrentAreaData();
         bool areaDirty = false;
         if (ImGui::TreeNode("Light")) {
-          areaDirty |= ImGui::SliderFloat3("Ligh Direction", area.lightDirection.data, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-          areaDirty |= ImGui::SliderFloat3("Ligh Radiance", area.lightRadiance.data, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        
+          areaDirty |= ImGui::SliderFloat("Sky Brighness", &area.skyBrightness, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+          if (ImGui::TreeNode("Directional Lights")) {
+            if (ImGui::Button("Add Directional Light")) {
+              areaDirty = true;
+              area.dirLightsData.push_back(AreaLightDataDir { });
+            }
+            uint lightId = 0;
+            uint toRemove = -1;
+            for (AreaLightDataDir& lightData : area.dirLightsData) {
+              if (ImGui::TreeNode(std::to_string(lightId).c_str())) {
+                if (ImGui::Button("Delete")) {
+                  toRemove = lightId;
+                  areaDirty = true;
+                }
 
+                areaDirty |= ImGui::SliderFloat3("Ligh Direction", lightData.lightDirection.data, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                if (ImGui::Button("Use game original light direction")) {
+                  lightData.lightDirection = areaManager.getOriLightDir();
+                  areaDirty = true;
+                }
+                areaDirty |= ImGui::SliderFloat3("Ligh Radiance", lightData.lightRadiance.data, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                if (ImGui::Button("X2")) {
+                  lightData.lightRadiance *= 2.0f;
+                  areaDirty = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("/2")) {
+                  lightData.lightRadiance *= 0.5f;
+                  areaDirty = true;
+                }
+                ImGui::TreePop();
+              }
+              ++lightId;
+            }
+            if (toRemove != -1)
+              area.dirLightsData.erase(area.dirLightsData.begin() + toRemove);
+            ImGui::TreePop();
+          }
+          if (ImGui::TreeNode("Point Lights")) {
+            if (ImGui::Button("Add Point Light")) {
+              areaDirty = true;
+              area.pointLightsData.push_back(AreaLightDataPoint { });
+            }
+            uint lightId = 0;
+            uint toRemove = -1;
+            for (AreaLightDataPoint& lightData : area.pointLightsData) {
+              if (ImGui::TreeNode(std::to_string(lightId).c_str())) {
+                if (ImGui::Button("Delete")) {
+                  toRemove = lightId;
+                  areaDirty = true;
+                }
+           
+
+                areaDirty |= ImGui::SliderFloat3("Ligh Radiance", lightData.lightRadiance.data, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                if (ImGui::Button("Init camera position at player pos")) {
+                  lightData.lightPosition = ctx->getCommonObjects()->getSceneManager().getCameraManager().getMainCamera().getPosition();
+                }
+                areaDirty |= ImGui::SliderFloat3("Ligh Position", lightData.lightPosition.data, -10000.0f, 10000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                areaDirty |= ImGui::SliderFloat("Ligh Radius", &lightData.lightRadius, 0.01f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                if (ImGui::Button("X2")) {
+                  lightData.lightRadiance *= 2.0f;
+                  areaDirty = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("/2")) {
+                  lightData.lightRadiance *= 0.5f;
+                  areaDirty = true;
+                }
+                ImGui::TreePop();
+              }
+              ++lightId;
+            }
+            if (toRemove != -1)
+              area.pointLightsData.erase(area.pointLightsData.begin() + toRemove);
+            ImGui::TreePop();
+          }
+   
           ImGui::TreePop();
         }
         if (ImGui::TreeNode("Volumetric")) {
@@ -2982,6 +3080,7 @@ namespace dxvk {
         }
 
         if (areaDirty) {
+          area.lightDirty = true;
           ctx->getCommonObjects()->getSceneManager().getLightManager().resetLightFallback();
         }
 

@@ -32,5 +32,5 @@
 
 bool surfaceIsDecal(Surface surface)
 {
-  return cb.enableDecalMaterialBlending && surface.isDecal;
+  return cb.enableDecalMaterialBlending && surface.isDecalAndParticleLighting && surface.isParticle == false;
 }

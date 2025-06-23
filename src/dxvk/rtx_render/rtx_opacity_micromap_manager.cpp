@@ -314,7 +314,7 @@ namespace dxvk {
 
       if (OpacityMicromapOptions::Building::allow2StateOpacityMicromaps() && (
         isBillboardOmmRequest() ||
-        (!alphaState.isFullyOpaque && (alphaState.isParticle || alphaState.isDecal)) || alphaState.emissiveBlend))
+        (!alphaState.isFullyOpaque && (alphaState.isParticle || (alphaState.isDecalAndParticleLighting &&alphaState.isParticle == false))) || alphaState.emissiveBlend))
         hashSourceData.ommFormat = VK_OPACITY_MICROMAP_FORMAT_2_STATE_EXT;
 
       if (OpacityMicromapOptions::Building::force2StateOpacityMicromaps())
@@ -1748,7 +1748,7 @@ namespace dxvk {
       desc.costPerTexelTapPerMicroTriangleBudget = OpacityMicromapOptions::Building::costPerTexelTapPerMicroTriangleBudget();
 
       // Overrides
-      if (instance.surface.alphaState.isDecal)
+      if ((instance.surface.alphaState.isDecalAndParticleLighting && instance.surface.alphaState.isParticle == false))
         desc.resolveTransparencyThreshold = std::max(desc.resolveTransparencyThreshold, OpacityMicromapOptions::Building::decalsMinResolveTransparencyThreshold());
 
       const auto& samplers = ctx->getCommonObjects()->getSceneManager().getSamplerTable();

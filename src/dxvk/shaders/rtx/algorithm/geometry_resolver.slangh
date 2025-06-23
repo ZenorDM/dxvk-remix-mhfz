@@ -1374,7 +1374,7 @@ void geometryResolverVertex(
     geometryResolverState.pomOpaqueSurfaceEncountered,
     isRaytracedRenderTarget,
     false, true);
-  
+
   if (cb.startInMediumMaterialIndex != BINDING_INDEX_INVALID)
   {
     const MemoryPolymorphicSurfaceMaterial memoryPolymorphicSurfaceMaterial = surfaceMaterials[cb.startInMediumMaterialIndex];
@@ -1478,9 +1478,10 @@ void geometryResolverVertex(
     // Note: Always write to primary surface for initial misses, 
     // it always will be the selected integrated surface in this case as well.
     geometryResolverOutputMiss(true, true, geometryResolverState.pixelCoordinate);
-    
-    SharedRadianceRG[geometryResolverState.pixelCoordinate] = geometryResolverState.radiance.rg;
-    SharedRadianceB[geometryResolverState.pixelCoordinate] = geometryResolverState.radiance.b;
+    // MHFZ start : send attenuation when miss
+    SharedRadianceRG[geometryResolverState.pixelCoordinate] = geometryResolverState.attenuation.rg;
+    SharedRadianceB[geometryResolverState.pixelCoordinate] = geometryResolverState.attenuation.b ;
+    // MHFZ end
     PrimaryScreenSpaceMotionVectorDLSSRR[geometryResolverState.pixelCoordinate] = calcMotionVectorForRayMiss(geometryResolverState.pixelCoordinate);
     PrimaryDepthDLSSRR[geometryResolverState.pixelCoordinate] = cb.clearColorDepth;
 
@@ -2084,9 +2085,10 @@ void geometryPSRResolverVertex(
     }
 
     // Output Miss
-    SharedRadianceRG[geometryPSRResolverState.pixelCoordinate] += geometryPSRResolverState.radiance.rg;
-    SharedRadianceB[geometryPSRResolverState.pixelCoordinate] += geometryPSRResolverState.radiance.b;
-
+    // MHFZ start : send attenuation when miss
+    SharedRadianceRG[geometryPSRResolverState.pixelCoordinate] += geometryPSRResolverState.attenuation.rg;
+    SharedRadianceB[geometryPSRResolverState.pixelCoordinate] += geometryPSRResolverState.attenuation.b;
+    // MHFZ end
     geometryResolverOutputMiss(
       geometryPSRResolverState.primarySurface, geometryPSRResolverState.selectedIntegrationSurface,
       geometryPSRResolverState.pixelCoordinate);

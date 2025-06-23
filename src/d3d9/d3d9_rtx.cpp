@@ -1082,6 +1082,7 @@ namespace dxvk {
       m_activeDrawCallState.materialData.roughnessTexture = {};
       m_activeDrawCallState.materialData.metallicTexture = {};
       m_activeDrawCallState.materialData.heightTexture = {};
+      m_activeDrawCallState.materialData.emissiveTexture = {};
       m_activeDrawCallState.materialData.colorTextureSlot[textureID] = kInvalidResourceSlot;
       m_activeDrawCallState.materialData.materialLayer = nullptr;
     }
@@ -1154,6 +1155,9 @@ namespace dxvk {
       if (legacyTextures.managedHeightTexture != nullptr) {
         m_activeDrawCallState.materialData.heightTexture = TextureRef(legacyTextures.managedHeightTexture);
       }
+      if (legacyTextures.managedEmissiveTexture != nullptr) {
+        m_activeDrawCallState.materialData.emissiveTexture = TextureRef(legacyTextures.managedEmissiveTexture);
+      }
       m_activeDrawCallState.materialData.materialLayer = legacyMaterialLayer;
       // MHFZ end
 
@@ -1209,13 +1213,24 @@ namespace dxvk {
     // MHFZ start
     diffuseEstimation();
 
+#ifdef REMIX_DEVELOPMENT
+    bool lightBinded = m_parent->IsShaderBindedConstant(186, ShaderType::Vertex);
+
+    if (lightBinded) {
+      m_parent->GetDXVKDevice()->getAreaManager().setOriLightDir(-d3d9State().vsConsts.fConsts[188].xyz());
+    }
+#endif
+
     bool ignoreDraw = d3d9State().isMaterialEnable() == false || m_parent->IsShaderBindedActivated() == false;
     if (ignoreDraw) {
       return PrepareDrawFlag::Ignore;
     }
     // MHFZ end
 
-    if (!RtxOptions::Get()->enableRaytracing() || !m_enableDrawCallConversion) {
+    // MHFZ start : this help handle hub zone transition
+    bool avoidRayTrace = m_parent->GetAreaManager().getQuestID() == 0 && m_parent->IsShaderHashBinded(0xCCF0D14, ShaderType::Vertex) == false;
+    // MHFZ end
+    if (!RtxOptions::Get()->enableRaytracing() || !m_enableDrawCallConversion || avoidRayTrace) {
       return PrepareDrawFlag::PreserveDrawCallAndItsState;
     }
 
@@ -1253,7 +1268,25 @@ namespace dxvk {
       }
     }
 
-    return internalPrepareDraw(indices, vertices, context);
+    PrepareDrawFlags returnFlags =  internalPrepareDraw(indices, vertices, context);
+
+    // MHFZ start : may need to be cleaned help to remove mesh form original draw if ui activation came too early
+    if (returnFlags == PrepareDrawFlag::PreserveDrawCallAndItsState) {
+      bool ignoreTexture = false;
+      if (const auto tex = GetCommonTexture(d3d9State().textures[0])) {
+        LegacyMaterialLayer* legacyMaterialLayer = m_parent->GetLegacyManager().getLegacyMaterialLayer(tex);
+
+        if (legacyMaterialLayer) {
+          ignoreTexture = legacyMaterialLayer->testFeatures(LegacyMaterialFeature::IgnoreOriginal);
+        }
+      }
+
+      if (ignoreTexture) {
+        return PrepareDrawFlag::Ignore;
+      }
+    }
+    // MHFZ end
+    return returnFlags;
   }
 
   PrepareDrawFlags D3D9Rtx::PrepareDrawUPGeometryForRT(const bool indexed,
@@ -1267,13 +1300,24 @@ namespace dxvk {
     // MHFZ start
     diffuseEstimation();
 
+#ifdef REMIX_DEVELOPMENT
+    bool lightBinded = m_parent->IsShaderBindedConstant(186, ShaderType::Vertex);
+
+    if (lightBinded) {
+      m_parent->GetDXVKDevice()->getAreaManager().setOriLightDir(-d3d9State().vsConsts.fConsts[188].xyz());
+    }
+#endif
+
     bool ignoreDraw = d3d9State().isMaterialEnable() == false || m_parent->IsShaderBindedActivated() == false;
     if (ignoreDraw) {
       return PrepareDrawFlag::Ignore;
     }
     // MHFZ end
 
-    if (!RtxOptions::Get()->enableRaytracing() || !m_enableDrawCallConversion) {
+    // MHFZ start : this help handle hub zone transition
+    bool avoidRayTrace = m_parent->GetAreaManager().getQuestID() == 0 && m_parent->IsShaderHashBinded(0xCCF0D14, ShaderType::Vertex) == false;
+    // MHFZ end
+    if (!RtxOptions::Get()->enableRaytracing() || !m_enableDrawCallConversion || avoidRayTrace) {
       return PrepareDrawFlag::PreserveDrawCallAndItsState;
     }
 
@@ -1294,7 +1338,25 @@ namespace dxvk {
     vertices[0].mappedSlice = buffer.slice.getSliceHandle(0, vertexSize);
     vertices[0].canUseBuffer = true;
 
-    return internalPrepareDraw(indices, vertices, drawContext);
+    PrepareDrawFlags returnFlags = internalPrepareDraw(indices, vertices, drawContext);
+
+    // MHFZ start : may need to be cleaned help to remove mesh form original draw if ui activation came too early
+    if (returnFlags == PrepareDrawFlag::PreserveDrawCallAndItsState) {
+      bool ignoreTexture = false;
+      if (const auto tex = GetCommonTexture(d3d9State().textures[0])) {
+        LegacyMaterialLayer* legacyMaterialLayer = m_parent->GetLegacyManager().getLegacyMaterialLayer(tex);
+
+        if (legacyMaterialLayer) {
+          ignoreTexture = legacyMaterialLayer->testFeatures(LegacyMaterialFeature::IgnoreOriginal);
+        }
+      }
+
+      if (ignoreTexture) {
+        return PrepareDrawFlag::Ignore;
+      }
+    }
+    // MHFZ end
+    return returnFlags;
   }
 
   void D3D9Rtx::ResetSwapChain(const D3DPRESENT_PARAMETERS& presentationParameters) {

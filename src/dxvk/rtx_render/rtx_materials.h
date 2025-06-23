@@ -145,7 +145,7 @@ struct RtSurface {
     flags |= alphaState.isBlendingDisabled ? (1 << 19) : 0;
     flags |= alphaState.emissiveBlend ?      (1 << 20) : 0;
     flags |= alphaState.isParticle ?         (1 << 21) : 0;
-    flags |= alphaState.isDecal ?            (1 << 22) : 0;
+    flags |= alphaState.isDecalAndParticleLighting ? (1 << 22) : 0;
     flags |= hasMaterialChanged ?            (1 << 23) : 0;
     flags |= isAnimatedWater ?               (1 << 24) : 0;
     flags |= isClipPlaneEnabled ?            (1 << 25) : 0;
@@ -326,7 +326,9 @@ struct RtSurface {
     bool invertedBlend = false;
     bool emissiveBlend = false;
     bool isParticle = false;
-    bool isDecal = false;
+    // MHFZ start : alias is decal and particle lighting toogle
+    bool isDecalAndParticleLighting = false;
+    // MHFZ end
   } alphaState;
 
   // Original draw call state
@@ -1513,6 +1515,10 @@ struct LegacyMaterialData {
   const TextureRef& getHeightTexture() const {
     return heightTexture;
   }
+
+  const TextureRef& getEmissiveTexture() const {
+    return emissiveTexture;
+  }
   // MHFZ end
 
   const Rc<DxvkSampler>& getSampler() const {
@@ -1652,6 +1658,7 @@ private:
   TextureRef roughnessTexture = {};
   TextureRef metallicTexture = {};
   TextureRef heightTexture = {};
+  TextureRef emissiveTexture = {};
   LegacyMaterialLayer* materialLayer;
   // MHFZ end
 

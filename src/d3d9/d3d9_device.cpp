@@ -62,12 +62,50 @@
 struct MHFZGameData : public IMHFZGameData {
   uint32_t areaID;
   uint32_t time;
+  uint32_t questID;
 };
+
+struct MHFZConfigData : public IMHFZConfigData {
+  UINT cameraDistance;
+  UINT cameraXSpeed;
+  UINT cameraYSpeed;
+  bool customCameraEnable;
+};
+
 // MHFZ end
 
 namespace dxvk {
   static const bool s_explicitFlush = (env::getEnvVar("DXVK_EXPLICIT_FLUSH") == "1");
-
+  // MHFZ start : array containing texture use in loading screen
+  static std::array<UINT, 26> loadHash = { 
+    0xBA76108A,
+    0x243EC447,
+    0xCEECA695,
+    0xA5170639,
+    0x27746A09,
+    0x53D8BB04,
+    0xB313D3AA,
+    0x74888F07,
+    0xC02CB7F5,
+    0x4E51115E,
+    0xBB61F59,
+    0x64FC9233,
+    0x145E1365,
+    0x590E0581,
+    0x8F9CB939,
+    0x90EB0423,
+    0x50FBF8A1,
+    0x61CBCC4A,
+    0x90EE9CC8,
+    0xE47CDA86,
+    0xE61AD343,
+    0x3C1FE40E,
+    0x8B921942,
+    0x2764C7C1,
+    0xB6E40B95,
+    0x57F9C39A
+  };
+  // MHFZ end
   D3D9DeviceEx::D3D9DeviceEx(
           D3D9InterfaceEx*       pParent,
           D3D9Adapter*           pAdapter,
@@ -2727,7 +2765,17 @@ namespace dxvk {
     if (unlikely(!PrimitiveCount)) {
       return S_OK;
     }
+    // MHFZ start : temp solution to avoid black screen during loading screen
+    bool hasPositionT = m_state.vertexDecl != nullptr ? m_state.vertexDecl->TestFlag(D3D9VertexDeclFlag::HasPositionT) : false;
+    if (hasPositionT && m_state.vertexShader == nullptr) {
+      if (m_dxvkDevice->getShaderHasher().isShaderHashBinded(0xDD8FE681, ShaderType::Pixel) && m_drawFullScreen == true) {
+        m_drawFullScreen = false;
+        return S_OK;
+      }
 
+    }
+
+    // MHFZ end
     auto drawInfo = GenerateDrawInfo(PrimitiveType, PrimitiveCount, 0);
 
     const uint32_t dataSize = GetUPDataSize(drawInfo.vertexCount, VertexStreamZeroStride);
@@ -3712,6 +3760,21 @@ namespace dxvk {
     const MHFZGameData* data = static_cast<const MHFZGameData*>(gameData);
     m_dxvkDevice->getAreaManager().setArea(data->areaID);
     m_dxvkDevice->getAreaManager().setTime(data->time);
+    m_dxvkDevice->getAreaManager().setQuestID(data->questID);
+    return S_OK;
+  }
+
+  // send camera option back to bridge server and client
+  HRESULT STDMETHODCALLTYPE D3D9DeviceEx::GetConfigData(IMHFZConfigData* configData) {
+    MHFZConfigData* data = static_cast<MHFZConfigData*>(configData);
+    data->customCameraEnable = RtxOptions::Get()->customCameraEnable();
+    if (IsShaderHashBinded(0xCCF0D14, ShaderType::Vertex) == false) {
+      data->customCameraEnable = false;
+    }
+    data->cameraDistance = RtxOptions::Get()->customCameraDistance();
+    data->cameraXSpeed = RtxOptions::Get()->customCameraXSpeed();
+    data->cameraYSpeed = RtxOptions::Get()->customCameraYSpeed();
+
     return S_OK;
   }
   // MHFZ end
@@ -4106,7 +4169,12 @@ namespace dxvk {
 
     auto oldTexture = GetCommonTexture(m_state.textures[StateSampler]);
     auto newTexture = GetCommonTexture(pTexture);
-
+    // MHFZ start : temp solution to avoid black screen during loading screen
+    uint32_t hash = GetLegacyManager().getTextureHash(newTexture);
+    if (std::find(loadHash.begin(), loadHash.end(), hash) != loadHash.end()) {
+      m_drawFullScreen = true;
+    }
+    // MHFZ end
     // We need to check our ops and disable respective stages.
     // Given we have transition from a null resource to
     // a valid resource or vice versa.
@@ -7022,7 +7090,7 @@ namespace dxvk {
     if (unlikely(pConstantData == nullptr))
       return D3DERR_INVALIDCALL;
 
-   
+
     m_dxvkDevice->getShaderHasher().pushConstant(ProgramType, ConstantType, StartRegister, Count, pConstantData);
     // MHFZ end
     if (unlikely(ShouldRecord()))

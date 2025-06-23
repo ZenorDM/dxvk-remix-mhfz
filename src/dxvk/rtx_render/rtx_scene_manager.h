@@ -234,13 +234,15 @@ private:
   ObjectCacheState processGeometryInfo(Rc<DxvkContext> ctx, const DrawCallState& drawCallState, RaytraceGeometry& modifiedGeometryData);
 
   // Consumes a draw call state and updates the scene state accordingly
-  uint64_t processDrawCallState(Rc<DxvkContext> ctx, const DrawCallState& blasInput, const MaterialData* replacementMaterialData);
+  // MHFZ start : pass legacy mesh if found null ortherwise
+  uint64_t processDrawCallState(Rc<DxvkContext> ctx, const DrawCallState& blasInput, const MaterialData* replacementMaterialData, LegacyMeshLayer* legacyMeshLayer=nullptr);
 
   RtSurfaceMaterial& createSurfaceMaterial( Rc<DxvkContext> ctx, 
                                                   const MaterialData& renderMaterialData,
                                                   const DrawCallState& drawCallState,
-                                                  uint32_t* out_indexInCache = nullptr);
-
+                                                  uint32_t* out_indexInCache = nullptr,
+                                                  LegacyMeshLayer* legacyMeshLayer = nullptr);
+  // MHFZ end
   // Updates ref counts for new buffers
   void updateBufferCache(RaytraceGeometry& newGeoData);
 

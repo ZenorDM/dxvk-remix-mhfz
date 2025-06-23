@@ -68,7 +68,7 @@ namespace dxvk {
       flags |= VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
 
     // This check can be overridden by replacement assets.
-    if (drawCall.getMaterialData().alphaBlendEnabled && !surface.alphaState.isDecal && !drawCall.getGeometryData().forceCullBit)
+    if (drawCall.getMaterialData().alphaBlendEnabled && !(surface.alphaState.isDecalAndParticleLighting && surface.alphaState.isParticle == false) && !drawCall.getGeometryData().forceCullBit)
       flags |= VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
 
     switch (drawCall.getGeometryData().cullMode) {
@@ -494,7 +494,11 @@ namespace dxvk {
 
       blendEnabled = true; // Note: Set to false later for cases which don't need it
 
-      if (colorBlendOp == VkBlendOp::VK_BLEND_OP_ADD) {
+      // MHFZ start : enable blend VK_BLEND_OP_REVERSE_SUBTRACT and VK_BLEND_OP_SUBTRACT will be handle by simulate light absorption
+      if (colorBlendOp == VkBlendOp::VK_BLEND_OP_ADD
+          || colorBlendOp == VkBlendOp::VK_BLEND_OP_REVERSE_SUBTRACT
+          || colorBlendOp == VkBlendOp::VK_BLEND_OP_SUBTRACT) {
+        // MHFZ end
         if (srcColorBlendFactor == VkBlendFactor::VK_BLEND_FACTOR_ONE && dstColorBlendFactor == VkBlendFactor::VK_BLEND_FACTOR_ZERO) {
           // Opaque Alias
           blendEnabled = false;
@@ -594,7 +598,12 @@ namespace dxvk {
 
       // Note: Particles are differentiated from typical objects with opacity by labeling their source material textures as being particle textures.
       out.isParticle = drawCall.testCategoryFlags(InstanceCategories::Particle);
-      out.isDecal = drawCall.testCategoryFlags(DECAL_CATEGORY_FLAGS);
+      // MHFZ start :  particle can now ignore lighting will use aliased surface parameter isDecalAndParticleLighting
+      if(out.isParticle)
+        out.isDecalAndParticleLighting = drawCall.testCategoryFlags(InstanceCategories::IgnoreLights) == false;
+      else
+        out.isDecalAndParticleLighting = drawCall.testCategoryFlags(DECAL_CATEGORY_FLAGS);
+      // MHFZ end
     } else {
       out.invertedBlend = false;
       out.emissiveBlend = false;
@@ -606,7 +615,12 @@ namespace dxvk {
 
     out.isFullyOpaque = !blendEnabled && out.alphaTestType == AlphaTestType::kAlways; // use the blend/test type from the output, rather than legacy for this so replacements can override
     out.isBlendingDisabled = !blendEnabled;
-
+    // MHFZ start :  if any of following blend state is use we use isBlendingDisabled to trigger "light absorption" only for particle surface
+    if (drawCall.getMaterialData().colorBlendOp == VkBlendOp::VK_BLEND_OP_REVERSE_SUBTRACT ||
+       drawCall.getMaterialData().colorBlendOp == VkBlendOp::VK_BLEND_OP_SUBTRACT){
+      out.isBlendingDisabled = true;
+    }
+    //MHFZ end
     // MHFZ start : adjust emissive here to take into account emissiveBlend
     if (material.getType() == RtSurfaceMaterialType::Opaque) {
       material.getOpaqueSurfaceMaterial().postCalculateBlendEmmisiveAdjust(out.emissiveBlend);
@@ -1000,7 +1014,7 @@ namespace dxvk {
     currentInstance.isFrontFaceFlipped = (currentInstance.m_vkInstance.flags & VK_GEOMETRY_INSTANCE_TRIANGLE_FLIP_FACING_BIT_KHR) != 0;
 
     // Apply the decal sort index for this instance so we can approximate order correctness on the GPU in AHS
-    if (currentInstance.surface.alphaState.isDecal) {
+    if (currentInstance.surface.alphaState.isDecalAndParticleLighting && currentInstance.surface.alphaState.isParticle == false) {
       currentInstance.surface.decalSortOrder = m_decalSortOrderCounter++;
 #if !NDEBUG
       if (m_decalSortOrderCounter > 255) {
@@ -1015,7 +1029,7 @@ namespace dxvk {
       currentInstance.m_geometryFlags = VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR;
     } else if (
       (!currentInstance.surface.alphaState.isFullyOpaque && currentInstance.surface.alphaState.isParticle) ||
-      (currentInstance.surface.alphaState.isDecal) ||
+      (currentInstance.surface.alphaState.isDecalAndParticleLighting && currentInstance.surface.alphaState.isParticle == false) ||
       // Note: include alpha blended geometry on the player model into the unordered TLAS. This is hacky as there might be
       // suitable geometry outside of the player model, but we don't have a way to distinguish it from alpha blended geometry
       // that should be alpha tested instead, like some metallic stairs in Portal -- those should be resolved normally.
@@ -1092,7 +1106,7 @@ namespace dxvk {
       } else {
         currentInstance.m_isPlayerModel = false;
         if (currentInstance.m_isUnordered && RtxOptions::Get()->enableSeparateUnorderedApproximations()) {
-          if (currentInstance.surface.alphaState.isDecal) {
+          if ((currentInstance.surface.alphaState.isDecalAndParticleLighting && currentInstance.surface.alphaState.isParticle == false)) {
             mask = OBJECT_MASK_UNORDERED_ALL_BLENDED;
           } else {
             // Separate set of mask bits for the unordered TLAS
@@ -1143,7 +1157,7 @@ namespace dxvk {
 
       if (currentInstance.testCategoryFlags(InstanceCategories::Beam)) {
         createBeams(currentInstance);
-      } else if(!currentInstance.surface.alphaState.isDecal) {
+      } else if(!(currentInstance.surface.alphaState.isDecalAndParticleLighting && currentInstance.surface.alphaState.isParticle == false)) {
         createBillboards(currentInstance, cameraManager.getMainCamera().getDirection(false));
       }
 

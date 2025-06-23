@@ -1186,7 +1186,8 @@ namespace dxvk {
     
     const RtxGlobalVolumetrics& globalVolumetrics = getCommonObjects()->metaGlobalVolumetrics();
     // MHFZ start : send areaData for fill volumetric accordingly
-    const AreaData& area = m_device->getAreaManager().getCurrentAreaData();
+    AreaManager& areaManager = m_device->getAreaManager();
+    const AreaData& area = areaManager.getCurrentAreaData();
     constants.volumeArgs = globalVolumetrics.getVolumeArgs(cameraManager, getSceneManager().getFogState(), enablePortalVolumes, area);
     // MHFZ end
     constants.startInMediumMaterialIndex = getSceneManager().getStartInMediumMaterialIndex();
@@ -1211,7 +1212,9 @@ namespace dxvk {
     constants.resolveOpaquenessThreshold = RtxOptions::Get()->getResolveOpaquenessThreshold();
     constants.resolveStochasticAlphaBlendThreshold = m_common->metaComposite().stochasticAlphaBlendOpacityThreshold();
 
-    constants.skyBrightness = RtxOptions::Get()->skyBrightness();RtxOptions::Get()->skyBrightness();
+    // MHFZ start : use area sky brighness
+    constants.skyBrightness = RtxOptions::Get()->skyBrightness() * areaManager.getSkyBrightness();
+    // MHFZ end
     constants.isLastCompositeOutputValid = restirGI.isActive() && restirGI.getLastCompositeOutput().matchesWriteFrameIdx(frameIdx - 1);
     constants.isZUp = RtxOptions::Get()->isZUp();
     constants.enableCullingSecondaryRays = RtxOptions::Get()->enableCullingInSecondaryRays();
@@ -2154,8 +2157,10 @@ namespace dxvk {
           Vector2 clipSpaceJitter = RtCamera::calcClipSpaceJitter(RtCamera::calcPixelJitter(m_device->getCurrentFrameId()),
                                                                   renderResolution[0], renderResolution[1],
                                                                   ratioX, ratioY);
-          modified.jitterX = clipSpaceJitter.x;
-          modified.jitterY = clipSpaceJitter.y;
+          // MHFZ start : temporally disable jittering for the sky
+          modified.jitterX = clipSpaceJitter.x * 0.0f;
+          modified.jitterY = clipSpaceJitter.y * 0.0f;
+          // MHFZ end
         }
         // Ensure that memcpy can be used for fewer memory interactions
         static_assert(std::is_trivially_copyable_v<D3D9RtxVertexCaptureData>);

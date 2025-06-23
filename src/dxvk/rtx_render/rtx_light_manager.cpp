@@ -219,10 +219,13 @@ namespace dxvk {
     }
   }
 
-  // MHFZ start : pass current AreaData
-  void LightManager::prepareSceneData(Rc<DxvkContext> ctx, CameraManager const& cameraManager, const AreaData& area) {
+  // MHFZ start : pass current AreaManager
+  void LightManager::prepareSceneData(Rc<DxvkContext> ctx, CameraManager const& cameraManager, AreaManager& areaManager) {
   // MHFZ end
     ScopedCpuProfileZone();
+    // MHFZ start 
+    AreaData& area = areaManager.getCurrentAreaData();
+    // MHFZ end
     // Note: Early outing in this function (via returns) should be done carefully (or not at all ideally) as it may skip important
     // logic such as swapping the current/previous frame light buffer, updating light count information or allocating/updating the
     // light buffer which may cause issues in some cases (or rather already has, which is why this warning exists).
@@ -231,19 +234,7 @@ namespace dxvk {
 
     const auto mode = fallbackLightMode();
 
-    // MHFZ start : use area data
-     {
-      const auto oldFallbackLightPresent = m_fallbackLight.has_value();
-      if (!oldFallbackLightPresent) {
-        m_fallbackLight.emplace(RtDistantLight(
-          // Note: Distant light direction must be normalized, but a non-normalized direction is provided as an option.
-          normalize(area.lightDirection),
-          5.0f * kDegreesToRadians / 2.0f,
-          area.lightRadiance
-        ));
-      }
-    }
-    // MHFZ end
+
 
     if (
       mode == FallbackLightMode::Always ||
@@ -334,16 +325,45 @@ namespace dxvk {
     // may be more expensive than simple vector traversal on the linearized list.
 
     m_linearizedLights.clear();
+    /*if (m_lights.size() > 1) {
+      for (auto&& pair : m_lights) {
+        RtLight& light = pair.second;
+
+        m_linearizedLights.emplace_back(&light);
+      }
+    }*/
 
     if (m_fallbackLight) {
       m_linearizedLights.emplace_back(&*m_fallbackLight);
     }
 
-    for (auto&& pair : m_lights) {
-      RtLight& light = pair.second;
+    // MHFZ start : use area data
+    if (area.lightDirty) {
+      area.lightDirty = false;
+      m_areaLight.clear();
+      for (const AreaLightDataDir& lightData : area.dirLightsData) {
 
-      m_linearizedLights.emplace_back(&light);
+          m_areaLight.emplace_back(RtDistantLight(
+            // Note: Distant light direction must be normalized, but a non-normalized direction is provided as an option.
+            normalize(lightData.lightDirection),
+            5.0f * kDegreesToRadians / 2.0f,
+            lightData.lightRadiance * areaManager.getLightFactor()
+          ));
+      }
+      for (const AreaLightDataPoint& lightData : area.pointLightsData) {
+        m_areaLight.emplace_back(RtSphereLight(
+          lightData.lightPosition,
+          lightData.lightRadiance * areaManager.getLightFactor(),
+          lightData.lightRadius,
+          RtLightShaping())
+        );
+      }
     }
+
+    for (RtLight& lightData : m_areaLight) {
+      m_linearizedLights.emplace_back(&lightData);
+    }
+    // MHFZ end
 
     for (auto& handle : m_externalActiveLightList) {
       auto found = m_externalLights.find(handle);

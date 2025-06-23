@@ -561,6 +561,7 @@ namespace dxvk {
     HRESULT STDMETHODCALLTYPE SendBaseTextureHash(UINT hash, IDirect3DBaseTexture9* texture);
     HRESULT STDMETHODCALLTYPE DestroyBaseTexture(IDirect3DBaseTexture9* texture);
     HRESULT STDMETHODCALLTYPE SendGameData(CONST IMHFZGameData* gameData);
+    HRESULT STDMETHODCALLTYPE GetConfigData(IMHFZConfigData* configData);
     // MHFZ end
 
     // Ex Methods
@@ -954,6 +955,10 @@ namespace dxvk {
       return m_dxvkDevice->getShaderHasher().isShaderBindedConstant(constant, shaderType);
     }
 
+    bool IsShaderHashBinded(uint32_t hash, ShaderType shaderType) {
+      return m_dxvkDevice->getShaderHasher().isShaderHashBinded(hash, shaderType);
+    }
+
     bool IsPreUIBinded() {
       return m_dxvkDevice->getShaderHasher().isPreUIBinded();
     }
@@ -975,6 +980,9 @@ namespace dxvk {
       return m_dxvkDevice->getLegacyManager();
     }
 
+    AreaManager& GetAreaManager() {
+      return m_dxvkDevice->getAreaManager();
+    }
     // MHFZ end
     // 
 // NV-DXVK start: external API
@@ -1358,7 +1366,7 @@ namespace dxvk {
 // NV-DXVK end
     // MHFZ start
     bool                            m_rayTraceThisFrame = false;
-
+    bool                            m_drawFullScreen = false;
     // MHFZ end
   };
 

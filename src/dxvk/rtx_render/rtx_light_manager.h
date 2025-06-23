@@ -42,7 +42,7 @@ namespace dxvk {
 class DxvkContext;
 class DxvkDevice;
 // MHFZ start : required forward declaration
-struct AreaData;
+class AreaManager;
 // MHFZ end
 
 struct LightRange {
@@ -86,8 +86,8 @@ public:
 
   void dynamicLightMatching();
 
-  // MHFZ start : pass current AreaData
-  void prepareSceneData(Rc<DxvkContext> ctx, CameraManager const& cameraManager, const AreaData& area);
+  // MHFZ start : pass current AreaManager
+  void prepareSceneData(Rc<DxvkContext> ctx, CameraManager const& cameraManager, AreaManager& areaManager);
   void resetLightFallback() {
     m_fallbackLight.reset();
   }
@@ -112,6 +112,7 @@ private:
   // Note: A fallback light tracked seperately and handled specially to not be mixed up with
   // lights provided from the application.
   std::optional<RtLight> m_fallbackLight{};
+  std::vector<RtLight> m_areaLight{};
   std::unordered_map<remixapi_LightHandle, RtLight> m_externalLights;
   std::unordered_map<remixapi_LightHandle, DomeLight> m_externalDomeLights;
   std::unordered_set<remixapi_LightHandle> m_externalActiveLightList;

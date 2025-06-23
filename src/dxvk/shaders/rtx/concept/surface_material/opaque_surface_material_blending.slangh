@@ -87,12 +87,12 @@ void calcOpaqueSurfaceMaterialOpacity(
 
   // When alpha-testing is used, but blending is disabled, the target alpha is 100%
   // MHFZ start : fix emissive alpha
-  /*if (surface.isBlendingDisabled)
+  if (surface.isBlendingDisabled && surface.isParticle == false)
   {
     opacity = newAlpha > float16_t(0.0f) ? float16_t(1.0f) : float16_t(0.0f);
 
     return;
-  }*/
+  }
   // MHFZ end
   // Handle Alpha Blending emulation
 

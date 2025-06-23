@@ -163,6 +163,13 @@ namespace dxvk {
     friend class RtxContext; // <-- we want to modify these values directly.
     friend class RtxInitializer; // <-- we want to modify these values directly.
 
+    // MHFZ start : new custom game camera options
+    RTX_OPTION("rtx.gameConfig", bool, customCameraEnable, true, "Enable custom camera");
+    RTX_OPTION("rtx.gameConfig", uint, customCameraDistance, 550, "Distance to custom camera");
+    RTX_OPTION("rtx.gameConfig", uint, customCameraXSpeed, 10, "Horizontal speed of custom camera");
+    RTX_OPTION("rtx.gameConfig", uint, customCameraYSpeed, 10, "Vertical speed of custom camera");
+    // MHFZ end
+
     RW_RTX_OPTION("rtx", fast_unordered_set, lightmapTextures, {},
                   "Textures used for lightmapping (baked static lighting on surfaces) in older games.\n"
                   "These textures will be ignored when attempting to determine the desired textures from a draw to use for ray tracing.");
@@ -464,7 +471,8 @@ namespace dxvk {
     RTX_OPTION("rtx", bool, showUICursor, true, "");
     RTX_OPTION_FLAG("rtx", bool, blockInputToGameInUI, true, RtxOptionFlags::NoSave, "");
 
-    // MHFZ start : fade opacity near camera
+    // MHFZ start : fade opacity near camera and quick unHide helper
+    RTX_OPTION_FLAG("rtx", bool, unHideMesh, false, RtxOptionFlags::NoSave, "");
     RTX_OPTION("rtx", float, nearFadeDistance, 0.0f, "Fade opacity when objects are near the camera");
     //MHFZ end
   private:

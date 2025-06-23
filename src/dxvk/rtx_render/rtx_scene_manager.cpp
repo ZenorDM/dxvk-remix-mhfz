@@ -612,31 +612,40 @@ namespace dxvk {
       // MHFZ start : add hide mesh features to by pass current mesh processDrawCallState add offset to world matrix
       LegacyManager& legacyManager = m_device->getLegacyManager();
       LegacyMeshLayer* legacyMeshLayer = legacyManager.getLegacyMeshLayer(input.getGeometryData().getHashForRule<rules::TopologicalHash>());
-      if (legacyMeshLayer && legacyMeshLayer->testFeatures(LegacyMeshFeature::HideMesh)) {
+      if (legacyMeshLayer && legacyMeshLayer->testFeatures(LegacyMeshFeature::HideMesh) && RtxOptions::Get()->unHideMesh() == false) {
         return;
       }
-      if (legacyMeshLayer && legacyMeshLayer->offset != Vector3(0.0f)) {
+      if (legacyMeshLayer && legacyMeshLayer->offset != Vector3(0.0f) && legacyMeshLayer->testFeatures(LegacyMeshFeature::FillHole) == false) {
         static DrawCallState newDrawCallState;
         newDrawCallState = input;
         Matrix4& viewMatrix = newDrawCallState.transformData.worldToView;
         newDrawCallState.transformData.objectToWorld[3] = newDrawCallState.transformData.objectToWorld[3] + Vector4(legacyMeshLayer->offset, 0);
         newDrawCallState.transformData.objectToView = viewMatrix * newDrawCallState.transformData.objectToWorld;
-        instanceId = processDrawCallState(ctx, newDrawCallState, overrideMaterialData);
+        instanceId = processDrawCallState(ctx, newDrawCallState, overrideMaterialData, legacyMeshLayer);
       } else {
           // MHFZ end
-          instanceId = processDrawCallState(ctx, input, overrideMaterialData);
+          instanceId = processDrawCallState(ctx, input, overrideMaterialData, legacyMeshLayer);
         }
       // MHFZ start : if the mesh is a custom blend we can hide hole by render an opaque mesh with a hard alpha cut
       if (input.testCategoryFlags(InstanceCategories::CustomBlend) && input.geometryData.boundingBox.canBeCustomBlend && legacyMeshLayer && legacyMeshLayer->testFeatures(LegacyMeshFeature::FillHole)) {
         static DrawCallState newDrawCallState;
         newDrawCallState = input;
         newDrawCallState.removeCategory(InstanceCategories::CustomBlend);
-        
+
         newDrawCallState.materialData.colorTextures[0] = {};
         newDrawCallState.materialData.alphaTestReferenceValue = 250;
 
+        newDrawCallState.materialData.alphaBlendEnabled = false;
+
+        newDrawCallState.geometryData.cullMode = VK_CULL_MODE_FRONT_BIT;
+        newDrawCallState.alphaBlendEnable = false;
+
+        Matrix4& viewMatrix = newDrawCallState.transformData.worldToView;
+        newDrawCallState.transformData.objectToWorld[3] = newDrawCallState.transformData.objectToWorld[3] + Vector4(legacyMeshLayer->offset, 0);
+        newDrawCallState.transformData.objectToView = viewMatrix * newDrawCallState.transformData.objectToWorld;
+
         newDrawCallState.materialData.updateCachedHash();
-        processDrawCallState(ctx, newDrawCallState, nullptr);
+        processDrawCallState(ctx, newDrawCallState, nullptr, legacyMeshLayer);
       }
       // MHFZ end
 
@@ -911,7 +920,9 @@ namespace dxvk {
     textureManager.addTexture(inputTexture, samplerFeedbackStamp, async, textureIndex);
   }
 
-  uint64_t SceneManager::processDrawCallState(Rc<DxvkContext> ctx, const DrawCallState& drawCallState, const MaterialData* overrideMaterialData) {
+  // MHFZ start : pass legacy mesh if found null ortherwise
+  uint64_t SceneManager::processDrawCallState(Rc<DxvkContext> ctx, const DrawCallState& drawCallState, const MaterialData* overrideMaterialData, LegacyMeshLayer* legacyMeshLayer) {
+  // MHFZ end
     ScopedCpuProfileZone();
     const bool usingOverrideMaterial = overrideMaterialData != nullptr;
     const MaterialData& renderMaterialData =
@@ -942,7 +953,7 @@ namespace dxvk {
 
     // Note: Use either the specified override Material Data or the original draw calls state's Material Data to create a Surface Material if no override is specified
     const auto renderMaterialDataType = renderMaterialData.getType();
-    RtSurfaceMaterial& surfaceMaterial = createSurfaceMaterial(ctx, renderMaterialData, drawCallState);
+    RtSurfaceMaterial& surfaceMaterial = createSurfaceMaterial(ctx, renderMaterialData, drawCallState, nullptr, legacyMeshLayer);
     RtInstance* instance = m_instanceManager.processSceneObject(m_cameraManager, m_rayPortalManager, *pBlas, drawCallState, renderMaterialData, surfaceMaterial);
 
     // Check if a light should be created for this Material
@@ -985,10 +996,13 @@ namespace dxvk {
     return instance ? instance->getId() : UINT64_MAX;
   }
 
+  // MHFZ start : pass legacy mesh if found null ortherwise
   RtSurfaceMaterial& SceneManager::createSurfaceMaterial( Rc<DxvkContext> ctx, 
                                                                 const MaterialData& renderMaterialData,
                                                                 const DrawCallState& drawCallState,
-                                                                uint32_t* out_indexInCache) {
+                                                                uint32_t* out_indexInCache,
+                                                                LegacyMeshLayer* legacyMeshLayer) {
+  // MHFZ end
     ScopedCpuProfileZone();
     const bool hasTexcoords = drawCallState.hasTextureCoordinates();
     const auto renderMaterialDataType = renderMaterialData.getType();
@@ -1106,7 +1120,6 @@ namespace dxvk {
 
         // MHFZ start : retrieve legacy material layer to use
         auto* legacyMaterialLayer = legacyMaterialData.materialLayer;
-        LegacyMeshLayer* legacyMeshLayer = legacyManager.getLegacyMeshLayer(drawCallState.getGeometryData().getHashForRule<rules::TopologicalHash>());
         if (legacyMeshLayer && legacyMeshLayer->overrideMaterial) {
           legacyMaterialLayer = &legacyMeshLayer->materialLayer;
         }
@@ -1157,6 +1170,9 @@ namespace dxvk {
             if (!legacyMaterialData.getHeightTexture().isImageEmpty() && legacyMaterialData.getHeightTexture().isValid() && heightEnable) {
               trackTexture(legacyMaterialData.getHeightTexture(), heightTextureIndex, hasTexcoords);
             }
+            if (!legacyMaterialData.getEmissiveTexture().isImageEmpty() && legacyMaterialData.getEmissiveTexture().isValid()) {
+              trackTexture(legacyMaterialData.getEmissiveTexture(), emissiveColorTextureIndex, hasTexcoords);
+            }
             // MHFZ end
           }
         }
@@ -1164,12 +1180,22 @@ namespace dxvk {
         // MHFZ start : legacyMaterialData.d3dMaterial.Diffuse contain shader material emulation done on cpu
         albedoOpacityConstant = Vector4(legacyMaterialData.d3dMaterial.Diffuse.r, legacyMaterialData.d3dMaterial.Diffuse.g, legacyMaterialData.d3dMaterial.Diffuse.b, legacyMaterialData.d3dMaterial.Diffuse.a);
         // MHFZ end
+        // 
         // MHFZ start : if any legacy material layer gather all differents materials params
+        if (legacyMeshLayer) {
+          normalizeVertexColor |= legacyMeshLayer->testFeatures(LegacyMeshFeature::NormalizeVertexColor);
+        }
+        AreaManager& areaManager = ctx->getDevice()->getAreaManager();
         if (legacyMaterialLayer) {
           softBlendFactor = legacyMaterialLayer->softBlendFactor;
           normalIntensity = legacyMaterialLayer->normalStrenght;
           emissiveIntensity = legacyMaterialLayer->emissiveIntensity;
+
           roughnessConstant = legacyMaterialLayer->roughnessBias;
+          if (legacyMaterialLayer->testFeatures(LegacyMaterialFeature::RainTexture)) {
+            areaManager.rainRegister();
+          }
+
           metallicConstant = legacyMaterialLayer->metallicBias;
           if (legacyMaterialLayer->testFeatures(LegacyMaterialFeature::Emissive)) {
             enableEmissive = true;
@@ -1178,10 +1204,12 @@ namespace dxvk {
           }
           features = legacyMaterialLayer->features;
           alphaBias = legacyMaterialLayer->alphaBias;
-        }
-
-        if (legacyMeshLayer) {
-          normalizeVertexColor = legacyMeshLayer->testFeatures(LegacyMeshFeature::NormalizeVertexColor);
+          if (legacyMaterialLayer->testFeatures(LegacyMaterialFeature::Particle)) {
+            normalizeVertexColor = false;
+          }
+          else {
+            roughnessConstant -= areaManager.getRoughnessFactor();
+          }
         }
         // MHFZ end
 
@@ -1641,9 +1669,9 @@ namespace dxvk {
     // Call on the other managers to prepare their GPU data for the current scene
     m_accelManager.prepareSceneData(ctx, execBarriers, m_instanceManager);
     // MHFZ start : update area data and send area data to light manager
-    m_device->getAreaManager().update();
-    const AreaData& area = m_device->getAreaManager().getCurrentAreaData();
-    m_lightManager.prepareSceneData(ctx, m_cameraManager, area);
+    AreaManager& areaManager = m_device->getAreaManager();
+    areaManager.update();
+    m_lightManager.prepareSceneData(ctx, m_cameraManager, areaManager);
     // MHFZ end
 
     // Build the TLAS

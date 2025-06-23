@@ -1,5 +1,6 @@
 #include "rtx_area_manager.h"
 #include <array>
+#include "rtx_json_utils.h"
 
 namespace dxvk {
 
@@ -482,8 +483,15 @@ namespace dxvk {
     {
       if (m_currentArea != area)
       {
+        m_currentRoughnessFactor = 0.0f;
+        m_lightFactor = 1.0f;
+        m_currentSkyBrightnessAtt = 1.0f;
         m_currentArea = area;
-        m_areas.emplace(area, AreaData{});
+        auto [it, emplaced] = m_areas.try_emplace(area, AreaData{});
+        it->second.lightDirty = true;
+        if (emplaced){
+          it->second.lightDirection = m_oriLightDir;
+        }
       }
     }
 
@@ -492,7 +500,10 @@ namespace dxvk {
     }
 
     const char* AreaManager::getCurrentAreaName() {
-      return IDName[m_currentArea];
+      if (m_currentArea < IDName.size())
+        return IDName[m_currentArea];
+      else
+        return "UNKNOW";
     }
 
     uint32_t AreaManager::getCurrentAreaID(){
@@ -506,4 +517,112 @@ namespace dxvk {
     AreaData& AreaManager::getCurrentAreaData() {
       return m_areas[m_currentArea];
     }
+
+    void to_json(json& j, const AreaLightDataDir& p) {
+      j = json {{"LightRadiance", p.lightRadiance },
+                 {"LightDirection", p.lightDirection},};
+    }
+    void from_json(const json& j, AreaLightDataDir& p) {
+      j.at("LightRadiance").get_to(p.lightRadiance);
+      j.at("LightDirection").get_to(p.lightDirection);
+    }
+
+    void to_json(json& j, const AreaLightDataPoint& p) {
+      j = json { {"LightRadiance", p.lightRadiance },
+                 {"LightPosition", p.lightPosition },
+                 {"LightRadius", p.lightRadius}, };
+    }
+    void from_json(const json& j, AreaLightDataPoint& p) {
+      j.at("LightRadiance").get_to(p.lightRadiance);
+      j.at("LightPosition").get_to(p.lightPosition);
+      j.at("LightRadius").get_to(p.lightRadius);
+    }
+
+    void to_json(json& j, const AreaData& p) {
+      j = json {
+                {"DirLightsData", p.dirLightsData},
+                {"PointLightsData", p.pointLightsData},
+                {"SkyBrightness", p.skyBrightness},
+                {"TransmittanceColor", p.transmittanceColor},
+                {"SingleScatteringAlbedo", p.singleScatteringAlbedo},
+                {"TransmittanceMeasurementDistanceMeters", p.transmittanceMeasurementDistanceMeters},
+                {"Anisotropy", p.anisotropy},
+                {"EnableHeterogeneousFog", p.enableHeterogeneousFog},
+                {"NoiseFieldSpatialFrequency", p.noiseFieldSpatialFrequency},
+                {"NoiseFieldOctaves", p.noiseFieldOctaves},
+                {"NoiseFieldDensityScale", p.noiseFieldDensityScale}};
+    }
+
+    void from_json(const json& j, AreaData& p) {
+      //j.at("LightRadiance").get_to(p.lightRadiance);
+      //j.at("LightDirection").get_to(p.lightDirection);
+
+      //p.dirLightsData.push_back(AreaLightDataDir { p.lightRadiance, p.lightDirection });
+
+      j.at("DirLightsData").get_to(p.dirLightsData);
+      j.at("PointLightsData").get_to(p.pointLightsData);
+      j.at("SkyBrightness").get_to(p.skyBrightness);
+      j.at("TransmittanceColor").get_to(p.transmittanceColor);
+      j.at("SingleScatteringAlbedo").get_to(p.singleScatteringAlbedo);
+      j.at("TransmittanceMeasurementDistanceMeters").get_to(p.transmittanceMeasurementDistanceMeters);
+      j.at("Anisotropy").get_to(p.anisotropy);
+      j.at("EnableHeterogeneousFog").get_to(p.enableHeterogeneousFog);
+      j.at("NoiseFieldSpatialFrequency").get_to(p.noiseFieldSpatialFrequency);
+      j.at("NoiseFieldOctaves").get_to(p.noiseFieldOctaves);
+      j.at("NoiseFieldDensityScale").get_to(p.noiseFieldDensityScale);
+
+    }
+
+    void AreaManager::load() {
+      {
+        wchar_t file_prefix[MAX_PATH] = L"";
+        GetModuleFileNameW(nullptr, file_prefix, ARRAYSIZE(file_prefix));
+        std::filesystem::path dump_path = file_prefix;
+        dump_path = dump_path.parent_path();
+        dump_path /= "Areas.json";
+
+        if (std::filesystem::exists(dump_path) == false)
+          return;
+        std::ifstream i;
+        i.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+        try {
+          i.open(dump_path.c_str());
+        }
+        catch (std::system_error& e) {
+          Logger::err(e.code().message());
+        }
+
+        if (!i.is_open()) {
+          return;
+        }
+        json j;
+        try {
+          j = json::parse(i);
+        }
+        catch (json::parse_error& ex) {
+          std::string error = str::format("load parse error at byte", ex.byte);
+          Logger::err(error.c_str());
+        }
+
+        m_areas = j.get<std::unordered_map<uint32_t, AreaData>>();
+      }
+    }
+
+    void AreaManager::save() {
+      {
+        json j;
+
+        wchar_t file_prefix[MAX_PATH] = L"";
+        GetModuleFileNameW(nullptr, file_prefix, ARRAYSIZE(file_prefix));
+        std::filesystem::path dump_path = file_prefix;
+        dump_path = dump_path.parent_path();
+        dump_path /= "Areas.json";
+
+        j = m_areas;
+
+        std::ofstream o { dump_path.c_str() };
+        o << j;
+      }
+    }
+
 }

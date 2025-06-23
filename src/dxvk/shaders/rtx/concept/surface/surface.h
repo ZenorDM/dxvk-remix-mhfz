@@ -94,12 +94,13 @@ struct Surface
     get { return packedFlagGet(data2.w, 1 << 21); }
     set { data2.w = newValue ? packedFlagSet(data2.w, 1 << 21)  : packedFlagUnset(data2.w, 1 << 21); }
   }
-
-  property bool isDecal
+  // MHFZ start : alias is decal and particle lighting toogle
+  property bool isDecalAndParticleLighting
   {
     get { return packedFlagGet(data2.w, 1 << 22); }
     set { data2.w = newValue ? packedFlagSet(data2.w, 1 << 22) : packedFlagUnset(data2.w, 1 << 22); }
   }
+  // MHFZ end
 
   property bool hasMaterialChanged
   {

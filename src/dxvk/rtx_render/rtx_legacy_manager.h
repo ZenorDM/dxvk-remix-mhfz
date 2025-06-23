@@ -7,6 +7,9 @@
 #include "rtx_option.h"
 
 namespace dxvk {
+
+
+
   enum class TextureState {
     None = 0,
     Loaded,
@@ -27,7 +30,7 @@ namespace dxvk {
     Effect,
   };
 
-  enum class LegacyMaterialFeature : uint16_t {
+  enum class LegacyMaterialFeature : uint32_t {
     None = 0,
     Albedo = 1 << 0,
     Normal = 1 << 1,
@@ -40,30 +43,35 @@ namespace dxvk {
     BackFaceCulling = 1 << 9,
     NoFade = 1 << 10,
     Water = 1 << 11,
+    Particle = 1 << 12,
+    Decals = 1 << 13,
+    IgnoreOriginal = 1 << 14,
+    RainTexture = 1 << 15,
+    ParticleIgnoreLight = 1 << 16,
     Default = Albedo | Normal | Roughness | Metallic,
     All = Albedo | Normal | Roughness | Metallic | Height,
   };
 
   constexpr LegacyMaterialFeature operator~(LegacyMaterialFeature a) {
-    return static_cast<LegacyMaterialFeature>(~static_cast<uint16_t>(a));
+    return static_cast<LegacyMaterialFeature>(~static_cast<uint32_t>(a));
   }
   inline LegacyMaterialFeature& operator&=(LegacyMaterialFeature& a, LegacyMaterialFeature b) {
-    return reinterpret_cast<LegacyMaterialFeature&>(reinterpret_cast<uint16_t&>(a) &= static_cast<uint16_t>(b));
+    return reinterpret_cast<LegacyMaterialFeature&>(reinterpret_cast<uint32_t&>(a) &= static_cast<uint32_t>(b));
   }
   constexpr LegacyMaterialFeature operator&(LegacyMaterialFeature a, LegacyMaterialFeature b) {
-    return static_cast<LegacyMaterialFeature>(static_cast<uint16_t>(a) & static_cast<uint16_t>(b));
+    return static_cast<LegacyMaterialFeature>(static_cast<uint32_t>(a) & static_cast<uint32_t>(b));
   }
   inline LegacyMaterialFeature& operator|=(LegacyMaterialFeature& a, LegacyMaterialFeature b) {
-    return reinterpret_cast<LegacyMaterialFeature&>(reinterpret_cast<uint16_t&>(a) |= static_cast<uint16_t>(b));
+    return reinterpret_cast<LegacyMaterialFeature&>(reinterpret_cast<uint32_t&>(a) |= static_cast<uint32_t>(b));
   }
   constexpr LegacyMaterialFeature operator|(LegacyMaterialFeature a, LegacyMaterialFeature b) {
-    return static_cast<LegacyMaterialFeature>(static_cast<uint16_t>(a) | static_cast<uint16_t>(b));
+    return static_cast<LegacyMaterialFeature>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
   }
   inline LegacyMaterialFeature& operator^=(LegacyMaterialFeature& a, LegacyMaterialFeature b) {
-    return reinterpret_cast<LegacyMaterialFeature&>(reinterpret_cast<uint16_t&>(a) ^= static_cast<uint16_t>(b));
+    return reinterpret_cast<LegacyMaterialFeature&>(reinterpret_cast<uint32_t&>(a) ^= static_cast<uint32_t>(b));
   }
   constexpr LegacyMaterialFeature operator^(LegacyMaterialFeature a, LegacyMaterialFeature b) {
-    return static_cast<LegacyMaterialFeature>(static_cast<uint16_t>(a) ^ static_cast<uint16_t>(b));
+    return static_cast<LegacyMaterialFeature>(static_cast<uint32_t>(a) ^ static_cast<uint32_t>(b));
   }
 
   struct LegacyMaterialLayer {
@@ -157,6 +165,7 @@ namespace dxvk {
     Rc<ManagedTexture> managedRoughnessTexture;
     Rc<ManagedTexture> managedMetallicTexture;
     Rc<ManagedTexture> managedHeightTexture;
+    Rc<ManagedTexture> managedEmissiveTexture;
   };
 
   struct LegacyTexture {
@@ -167,6 +176,7 @@ namespace dxvk {
                   std::optional<std::string>& roughnessTexturePath, 
                   std::optional<std::string>& metallicTexturePath, 
                   std::optional<std::string>& heightTexturePath,
+                  std::optional<std::string>& emissiveTexturePath,
                   TextureOrigin origin,
                   LegacyMaterialLayer* legacyMaterialLayer);
     std::optional< std::string> albedoTexturePath;
@@ -174,6 +184,7 @@ namespace dxvk {
     std::optional< std::string> roughnessTexturePath;
     std::optional< std::string> metallicTexturePath;
     std::optional< std::string> heightTexturePath;
+    std::optional< std::string> emissiveTexturePath;
     LegacyManagedTextures managedTextures;
     LegacyMaterialLayer* legacyMaterialLayer;
     uint32_t hash;

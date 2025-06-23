@@ -34,6 +34,9 @@
 #include <rtx_shaders/composite.h>
 #include <rtx_shaders/composite_alpha_blend.h>
 #include "rtx_texture_manager.h"
+// MHFZ sart : required includes
+#include "rtx_area_manager.h"
+// MHFZ end
 
 constexpr ImGuiTreeNodeFlags collapsingHeaderClosedFlags = ImGuiTreeNodeFlags_CollapsingHeader;
 
@@ -405,8 +408,9 @@ namespace dxvk {
     memcpy(&compositeArgs.rayPortalHitInfos[maxRayPortalCount], &portalData.previousRayPortalHitInfos, sizeof(portalData.previousRayPortalHitInfos));
 
     compositeArgs.domeLightArgs = domeLightArgs;
-    compositeArgs.skyBrightness = RtxOptions::Get()->skyBrightness();
-
+    // MHFZ start : use area sky brighness
+    compositeArgs.skyBrightness = RtxOptions::Get()->skyBrightness() * m_device->getAreaManager().getSkyBrightness();
+    // MHFZ end
     Rc<DxvkBuffer> cb = getCompositeConstantsBuffer();
     ctx->writeToBuffer(cb, 0, sizeof(CompositeArgs), &compositeArgs);
     ctx->getCommandList()->trackResource<DxvkAccess::Read>(cb);

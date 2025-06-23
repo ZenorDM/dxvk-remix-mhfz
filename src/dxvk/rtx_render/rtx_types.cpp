@@ -66,13 +66,30 @@ namespace dxvk {
       // MHFZ end
 
       // MHFZ start : allow backface culling for geometry
-      if (legacyMeshLayer && legacyMeshLayer->testFeatures(LegacyMeshFeature::CustomBlend) == false && legacyMaterialLayer && legacyMaterialLayer->testFeatures(LegacyMaterialFeature::BackFaceCulling)) {
-        materialData.alphaBlendEnabled = false;
-        materialData.alphaTestEnabled = false;
+      // and feature to InstanceCategories
+      if (legacyMaterialLayer) {
+        if (legacyMeshLayer && legacyMeshLayer->testFeatures(LegacyMeshFeature::CustomBlend) == false && legacyMaterialLayer->testFeatures(LegacyMaterialFeature::BackFaceCulling)) {
+          materialData.alphaBlendEnabled = false;
+          materialData.alphaTestEnabled = false;
 
-        geometryData.cullMode = VK_CULL_MODE_FRONT_BIT;
-        alphaBlendEnable = false;
+          geometryData.cullMode = VK_CULL_MODE_FRONT_BIT;
+          alphaBlendEnable = false;
+        }
+        if (legacyMaterialLayer->testFeatures(LegacyMaterialFeature::Particle)) {
+          setCategory(InstanceCategories::Particle, true);
+          if (legacyMaterialLayer->testFeatures(LegacyMaterialFeature::ParticleIgnoreLight)) {
+            setCategory(InstanceCategories::IgnoreLights, true);
+          }
+        }
+        if (legacyMaterialLayer->testFeatures(LegacyMaterialFeature::Decals)) {
+          setCategory(InstanceCategories::DecalStatic, true);
+        }
       }
+
+      if (testCategoryFlags(InstanceCategories::Particle)) {
+        setCategory(InstanceCategories::IgnoreOpacityMicromap, true);
+      }
+
       // MHFZ end
 
       // MHFZ start : enable CustomBlend according to legacy material layer may need a clean

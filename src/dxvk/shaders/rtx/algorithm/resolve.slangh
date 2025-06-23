@@ -165,7 +165,19 @@ bool evaluateOpaqueApproximations(
     // Secondly, in the future this should use spherical harmonics to convert to a diffuse (or perhaps some sort of directional HG phase function to allow
     // for some contribution from behind) distribution so more directionality is respected rather than this simple multiply by 4 hack (which is not super physically correct).
     // Finally, albedo has opacity baked into it already so it does not need to be multiplied in here.
-    emissiveRadiance += opaqueSurfaceMaterialInteraction.albedo * accumulatedOutgoingRadiance * incomingRadianceAttenuation;
+    // MHFZ start : A bit hacky simulate "light absorption" effect from MHFZ, store in isBlendingDisabled
+    if (surface.isParticle && surface.isBlendingDisabled) {
+      emissiveRadiance -= opaqueSurfaceMaterialInteraction.albedo;
+      emissiveRadiance = max(emissiveRadiance, 0.0);
+    }
+    else {
+      vec3 curentEmmisiveRadiance = opaqueSurfaceMaterialInteraction.albedo;
+      if (surface.isDecalAndParticleLighting) {
+        curentEmmisiveRadiance *= accumulatedOutgoingRadiance * incomingRadianceAttenuation;
+      }
+      emissiveRadiance += curentEmmisiveRadiance;
+    }
+    // MHFZ end
   }
 #else
   const bool opacityLightingApprox = false;
@@ -184,13 +196,23 @@ bool evaluateOpaqueApproximations(
   {
     // Note: Accumulate the material's emission into the radiance approximation as this can be calculated on any hit arbitarily. This factors the
     // attenuation across the resolve iterations in before emissive (to not cause self-attenuation) similar to any other path tracing loop in the project.
-    emissiveRadiance +=
-      opaqueSurfaceMaterialInteractionEvalEmissiveRadiance(opaqueSurfaceMaterialInteraction) *
-      incomingRadianceAttenuation;
+    // MHFZ start : A bit hacky simulate "light absorption" effect from MHFZ, store in isBlendingDisabled
+    if ((surface.isParticle && surface.isBlendingDisabled) == false) {
+      emissiveRadiance +=
+        opaqueSurfaceMaterialInteractionEvalEmissiveRadiance(opaqueSurfaceMaterialInteraction) *
+        incomingRadianceAttenuation;
+    }
+    // MHFZ end
     // Note: Accumulate opacity into the radiance approximation, actually a perfect representation of the effects of
     // opacity on visibility rays. This is done for both approximation modes as this resolve hit is being skipped in either
     // case and this attenuation should give a more proper approximation for more complex emissive blending modes.
     outgoingRadianceAttenuation *= float16_t(1.0f) - opacity;
+
+    // MHFZ start : A bit hacky simulate "light absorption" effect from MHFZ, store in isBlendingDisabled
+    if (surface.isParticle && surface.isBlendingDisabled) {
+      outgoingRadianceAttenuation *= pow(float16_t(1.0f) - opacity,10);
+    }
+    // MHFZ end
     // Todo: Potentially evaluate ambient here too like we do for emission? Doesn't depend on light direction or anything
     // either, but ideally we want to get rid of the ambient term some day so we'll skip it for now.
 
@@ -854,6 +876,11 @@ void resolveVertexUnordered<let RAY_FLAGS : uint8_t>(
   const uint kMaxUnorderedResolveSteps = 32;
 #endif
 
+  // MHFZ start : to stabilize sort emissive do not use radianceAttenuation
+  float emissiveOpacity = 0.0f;
+  f16vec3 radianceAttenuationParticle = radianceAttenuation;
+  // MHFZ end
+
   for (uint step=0 ; step<kMaxUnorderedResolveSteps && rayQuery.Proceed() ; step++)
   {
     RayHitInfo rayHitInfo;
@@ -1014,6 +1041,7 @@ void resolveVertexUnordered<let RAY_FLAGS : uint8_t>(
     float16_t currentRadianceAttenuation = float16_t(1.0f);
     vec3 currentEmissiveRadiance = vec3(0.0f);
     float16_t blendFactor = float16_t(1.0f);
+    float opacity = 0.0;
     if (polymorphicType == surfaceMaterialTypeOpaque)
     {
       const OpaqueSurfaceMaterial opaqueSurfaceMaterial = opaqueSurfaceMaterialCreate(memoryPolymorphicSurfaceMaterial);
@@ -1021,8 +1049,14 @@ void resolveVertexUnordered<let RAY_FLAGS : uint8_t>(
       const OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteraction =
         opaqueSurfaceMaterialInteractionCreate(opaqueSurfaceMaterial, surface, surfaceInteraction, rayInteraction);
 
-      // MHFZ start: add per surface softBlendFactor
+      // MHFZ start: add per surface softBlendFactor and plug near fade distance to it
       blendFactor = opaqueSurfaceMaterial.softBlendFactor;
+      opacity = opaqueSurfaceMaterialInteraction.opacity;
+      if ((opaqueSurfaceMaterial.flags & OPAQUE_SURFACE_MATERIAL_FLAG_NO_FADE) == 0) {
+        float fadeFactor = saturate((rayInteraction.coneRadius) / (cb.nearFadeDistance + 0.0001));
+        fadeFactor = mix(0.0, 1.0, pow(fadeFactor, 5));
+        blendFactor *= fadeFactor;
+      }
       // MHFZ end
       if (isTriangle && surfaceIsDecal(surface))
       {
@@ -1137,7 +1171,17 @@ void resolveVertexUnordered<let RAY_FLAGS : uint8_t>(
       // accumulate volume radiance multiple times for overlapping unordered segments).
       const f16vec3 volumeAttenuation = evalVolumetricAttenuation(cb.volumeArgs, true, lowestDistance, ray.origin, ray.direction);
 
-      emissiveRadiance += lowestRadianceAndAttenuation.rgb * radianceAttenuation * volumeAttenuation;
+      // MHFZ start : emissive found in unordored tlas
+      if (surface.isEmissive && surface.isParticle) {
+
+        emissiveOpacity += opacity;
+        emissiveOpacity = saturate(emissiveOpacity);
+      }
+      // MHFZ end
+
+      // MHFZ start : to stabilize sort emissive do not use radianceAttenuation
+      emissiveRadiance += lowestRadianceAndAttenuation.rgb * volumeAttenuation;
+      // MHFZ end
       // Hack: This is done as a workaround for a compiler bug (REMIX-1551), should be revertex back to what it was originally to avoid
       // increased register pressure in resolving.
       radianceAttenuation = f16vec3(vec3(radianceAttenuation) * float(lowestRadianceAndAttenuation.a));
@@ -1203,7 +1247,9 @@ void resolveVertexUnordered<let RAY_FLAGS : uint8_t>(
     // accumulate volume radiance multiple times for overlapping unordered segments).
     const f16vec3 volumeAttenuation = evalBeerLambertAttenuation(cb.volumeArgs.attenuationCoefficient, lowestDistance);
 
-    emissiveRadiance += lowestRadianceAndAttenuation.rgb * radianceAttenuation * volumeAttenuation;
+    // MHFZ start : to stabilize sort emissive do not use radianceAttenuation
+    emissiveRadiance += lowestRadianceAndAttenuation.rgb * volumeAttenuation;
+    // MHFZ end
     // Hack: This is done as a workaround for a compiler bug (REMIX-1551), should be revertex back to what it was originally to avoid
     // increased register pressure in resolving.
     radianceAttenuation = f16vec3(vec3(radianceAttenuation) * float(lowestRadianceAndAttenuation.a));

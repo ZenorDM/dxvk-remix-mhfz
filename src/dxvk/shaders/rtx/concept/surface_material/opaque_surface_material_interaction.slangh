@@ -768,7 +768,7 @@ OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteractionCreate(
   if (roughnessLoaded)
   {
     // MHFZ start : add per surface roughness bias
-    roughness = saturate(roughness+roughnessSample.x);
+    roughness = max(saturate(roughness + roughnessSample.x),0.05);
     // MHFZ end
   }
 
@@ -798,10 +798,7 @@ OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteractionCreate(
 
   f16vec3 emissiveColor = opaqueSurfaceMaterial.emissiveColorConstant;
 
-  if (emissiveColorLoaded)
-  {
-    emissiveColor = emissiveColorSample.xyz;
-  }
+
 
   // Note: Gamma correct emissive color input (be it from a constant or a texture). Currently assuming all textures are not using sRGB formats which
   // automatically do this conversion.
@@ -839,6 +836,14 @@ OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteractionCreate(
 
   f16vec3 derivedEmissiveColor;
   float16_t derivedEmissiveIntensity;
+  // MHFZ start : emmise texture is use as mask rather than emissive color
+  float16_t maskEmissiveIntensity = 1.0;
+
+  if (emissiveColorLoaded)
+  {
+    maskEmissiveIntensity = emissiveColorSample.x;
+  }
+  // MHFZ end
 
   // Note: "Fullbright", emissive blend modes and actual emissive color/intensity are mututally exclusive so this logic for selecting between them in this order is fine.
   if (surface.isEmissive)
@@ -854,7 +859,7 @@ OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteractionCreate(
     // Todo: Move this all once separate Surface Materials for D3D9 compatability and normal usage are created.
     derivedEmissiveColor = originalAlbedo;
     // MHFZ start : add per surface emissive intensity
-    derivedEmissiveIntensity = emissiveBlendOverrideInfluence * uint16BitsToHalf(cb.emissiveBlendOverrideEmissiveIntensity) * opaqueSurfaceMaterial.emissiveIntensity;
+    derivedEmissiveIntensity = emissiveBlendOverrideInfluence * uint16BitsToHalf(cb.emissiveBlendOverrideEmissiveIntensity) * opaqueSurfaceMaterial.emissiveIntensity * maskEmissiveIntensity;
     // MHFZ end
   }
   else
@@ -862,7 +867,9 @@ OpaqueSurfaceMaterialInteraction opaqueSurfaceMaterialInteractionCreate(
      // MHFZ start : use original albedo as emissive color
     derivedEmissiveColor = emissiveColor * originalAlbedo;
     // MHFZ end
-    derivedEmissiveIntensity = opaqueSurfaceMaterial.emissiveIntensity;
+    // MHFZ start
+    derivedEmissiveIntensity = opaqueSurfaceMaterial.emissiveIntensity * maskEmissiveIntensity;
+    // MHFZ end
   }
 
   derivedEmissiveIntensity *= uint16BitsToHalf(cb.emissiveIntensity); // Note: Global emissive intensity scalar on top of everything else.

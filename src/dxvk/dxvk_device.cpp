@@ -55,6 +55,7 @@ namespace dxvk {
     // MHFZ start
     m_shaderHasher.loadProfil();
     m_legacyManager.load();
+    m_areaManager.load();
     // MHFZ end
 
     m_queues.graphics = getQueue(adapterQueueInfos.graphics.queueFamilyIndex, adapterQueueInfos.graphics.queueIndex);
