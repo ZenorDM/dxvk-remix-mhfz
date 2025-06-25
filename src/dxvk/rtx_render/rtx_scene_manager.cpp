@@ -1095,7 +1095,7 @@ namespace dxvk {
       float softBlendFactor = 1.0f;
       float alphaBias = 1.0f;
 
-      bool normalizeVertexColor = true;
+      bool normalizeVertexColor = false;
       LegacyMaterialFeature features = LegacyMaterialFeature::None;
       // MHFZ end
 
