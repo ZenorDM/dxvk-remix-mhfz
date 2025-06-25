@@ -353,11 +353,24 @@ namespace dxvk {
       for (const AreaLightDataPoint& lightData : area.pointLightsData) {
         m_areaLight.emplace_back(RtSphereLight(
           lightData.lightPosition,
-          lightData.lightRadiance * areaManager.getLightFactor(),
+          lightData.lightRadiance,
           lightData.lightRadius,
           RtLightShaping())
         );
       }
+      for (const AreaLightDataRect& lightData : area.rectLightsData) {
+        RtRectLight light = RtRectLight(
+          Vector3(0.0, 0.0, 0.0),
+          lightData.dimensions,
+          Vector3(1.0, 0.0, 0.0),
+          Vector3(0.0, 1.0, 0.0),
+          Vector3(0.0, 0.0, 1.0),
+          lightData.lightRadiance,
+          RtLightShaping());
+        light.applyTransform(lightData.transform);
+        m_areaLight.emplace_back(light);
+      }
+
     }
 
     for (RtLight& lightData : m_areaLight) {

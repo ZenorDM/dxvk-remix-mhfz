@@ -18,12 +18,24 @@ namespace dxvk {
     float lightRadius = 1.0f;
   };
 
+  struct AreaLightDataRect {
+    Vector3 lightRadiance = Vector3(1.6f, 1.8f, 2.0f);
+    Vector3 lightPosition = Vector3(-0.2f, -1.0f, 0.4f);
+    Vector3 rotation = Vector3(0.f, 0.f, 0.f);
+    Vector2 dimensions = Vector2(1.f, 1.f);
+
+    Matrix4 transform;
+
+    void buildMatrix();
+  };
+
   struct AreaData {
     // light values
     Vector3 lightRadiance = Vector3(1.6f, 1.8f, 2.0f);
     Vector3 lightDirection = Vector3(-0.2f, -1.0f, 0.4f);
     std::vector<AreaLightDataDir > dirLightsData;
     std::vector<AreaLightDataPoint > pointLightsData;
+    std::vector<AreaLightDataRect > rectLightsData;
 
     // volumetric values
     Vector3 transmittanceColor = Vector3(0.999f, 0.999f, 0.999f);
@@ -60,7 +72,7 @@ namespace dxvk {
     }
 
     void update();
-    const char* getCurrentAreaName();
+
     uint32_t getCurrentAreaID();
     AreaData& getAreaData(uint32_t area);
     AreaData& getCurrentAreaData();
@@ -93,6 +105,11 @@ namespace dxvk {
       }
       m_lightFactor = 0.15f;
     }
+
+    std::unordered_map<uint32_t, AreaData>& getAreas() {
+      return m_areas;
+    }
+
   private:
 
     std::unordered_map<uint32_t, AreaData> m_areas;

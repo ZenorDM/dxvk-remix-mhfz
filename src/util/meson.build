@@ -8,6 +8,8 @@ util_src = files([
   'util_matrix.cpp',
   'util_monitor.cpp',
   'util_window.cpp',
+  'util_json.cpp',
+  'util_json.h',
 
   'thread.cpp',
   

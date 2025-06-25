@@ -2963,6 +2963,7 @@ namespace dxvk {
     }
 
     // MHFZ start: Add tab to specific mhfz options
+#ifdef REMIX_DEVELOPMENT
     if (ImGui::BeginTabItem("Step 3: MHFZ specific options", nullptr, tab_item_flags)) {
       ImGui::Indent();
 
@@ -2981,109 +2982,157 @@ namespace dxvk {
         DxvkDevice* device = ctx->getCommonObjects()->getSceneManager().device();
         AreaManager& areaManager = device->getAreaManager();
         ImGui::Text("Time %u",areaManager.getTime());
-        ImGui::Text(areaManager.getCurrentAreaName());
-        AreaData& area = areaManager.getCurrentAreaData();
-        bool areaDirty = false;
-        if (ImGui::TreeNode("Light")) {
-        
-          areaDirty |= ImGui::SliderFloat("Sky Brighness", &area.skyBrightness, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-          if (ImGui::TreeNode("Directional Lights")) {
-            if (ImGui::Button("Add Directional Light")) {
-              areaDirty = true;
-              area.dirLightsData.push_back(AreaLightDataDir { });
-            }
-            uint lightId = 0;
-            uint toRemove = -1;
-            for (AreaLightDataDir& lightData : area.dirLightsData) {
-              if (ImGui::TreeNode(std::to_string(lightId).c_str())) {
-                if (ImGui::Button("Delete")) {
-                  toRemove = lightId;
-                  areaDirty = true;
-                }
 
-                areaDirty |= ImGui::SliderFloat3("Ligh Direction", lightData.lightDirection.data, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                if (ImGui::Button("Use game original light direction")) {
-                  lightData.lightDirection = areaManager.getOriLightDir();
-                  areaDirty = true;
-                }
-                areaDirty |= ImGui::SliderFloat3("Ligh Radiance", lightData.lightRadiance.data, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                if (ImGui::Button("X2")) {
-                  lightData.lightRadiance *= 2.0f;
-                  areaDirty = true;
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("/2")) {
-                  lightData.lightRadiance *= 0.5f;
-                  areaDirty = true;
-                }
-                ImGui::TreePop();
+        auto drawArea = [&areaManager, &ctx](AreaData& _area) {
+          bool areaDirty = false;
+          if (ImGui::TreeNode("Light")) {
+            areaDirty |= ImGui::SliderFloat("Sky Brighness", &_area.skyBrightness, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            if (ImGui::TreeNode("Directional Lights")) {
+              if (ImGui::Button("Add Directional Light")) {
+                areaDirty = true;
+                _area.dirLightsData.push_back(AreaLightDataDir { });
               }
-              ++lightId;
+              uint lightId = 0;
+              uint toRemove = -1;
+              for (AreaLightDataDir& lightData : _area.dirLightsData) {
+                if (ImGui::TreeNode(std::to_string(lightId).c_str())) {
+                  if (ImGui::Button("Delete")) {
+                    toRemove = lightId;
+                    areaDirty = true;
+                  }
+
+                  areaDirty |= ImGui::SliderFloat3("Ligh Direction", lightData.lightDirection.data, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                  if (ImGui::Button("Use game original light direction")) {
+                    lightData.lightDirection = areaManager.getOriLightDir();
+                    areaDirty = true;
+                  }
+                  areaDirty |= ImGui::SliderFloat3("Ligh Radiance", lightData.lightRadiance.data, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                  if (ImGui::Button("X2")) {
+                    lightData.lightRadiance *= 2.0f;
+                    areaDirty = true;
+                  }
+                  ImGui::SameLine();
+                  if (ImGui::Button("/2")) {
+                    lightData.lightRadiance *= 0.5f;
+                    areaDirty = true;
+                  }
+                  ImGui::TreePop();
+                }
+                ++lightId;
+              }
+              if (toRemove != -1)
+                _area.dirLightsData.erase(_area.dirLightsData.begin() + toRemove);
+              ImGui::TreePop();
             }
-            if (toRemove != -1)
-              area.dirLightsData.erase(area.dirLightsData.begin() + toRemove);
+            if (ImGui::TreeNode("Point Lights")) {
+              if (ImGui::Button("Add Point Light")) {
+                areaDirty = true;
+                _area.pointLightsData.push_back(AreaLightDataPoint { });
+              }
+              uint lightId = 0;
+              uint toRemove = -1;
+              for (AreaLightDataPoint& lightData : _area.pointLightsData) {
+                if (ImGui::TreeNode(std::to_string(lightId).c_str())) {
+                  if (ImGui::Button("Delete")) {
+                    toRemove = lightId;
+                    areaDirty = true;
+                  }
+
+
+                  areaDirty |= ImGui::SliderFloat3("Ligh Radiance", lightData.lightRadiance.data, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                  if (ImGui::Button("Init light position at camera pos")) {
+                    lightData.lightPosition = ctx->getCommonObjects()->getSceneManager().getCameraManager().getMainCamera().getPosition();
+                  }
+                  areaDirty |= ImGui::SliderFloat3("Ligh Position", lightData.lightPosition.data, -10000.0f, 10000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                  areaDirty |= ImGui::SliderFloat("Ligh Radius", &lightData.lightRadius, 0.01f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                  if (ImGui::Button("X2")) {
+                    lightData.lightRadiance *= 2.0f;
+                    areaDirty = true;
+                  }
+                  ImGui::SameLine();
+                  if (ImGui::Button("/2")) {
+                    lightData.lightRadiance *= 0.5f;
+                    areaDirty = true;
+                  }
+                  ImGui::TreePop();
+                }
+                ++lightId;
+              }
+              if (toRemove != -1)
+                _area.pointLightsData.erase(_area.pointLightsData.begin() + toRemove);
+              ImGui::TreePop();
+            }
+
+            if (ImGui::TreeNode("Rect Lights")) {
+              if (ImGui::Button("Add Rect Light")) {
+                areaDirty = true;
+                _area.rectLightsData.push_back(AreaLightDataRect { });
+              }
+              uint lightId = 0;
+              uint toRemove = -1;
+              for (AreaLightDataRect& lightData : _area.rectLightsData) {
+                if (ImGui::TreeNode(std::to_string(lightId).c_str())) {
+                  if (ImGui::Button("Delete")) {
+                    toRemove = lightId;
+                    areaDirty = true;
+                  }
+
+
+                  areaDirty |= ImGui::SliderFloat3("Ligh Radiance", lightData.lightRadiance.data, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                  if (ImGui::Button("Init light position at camera pos")) {
+                    lightData.lightPosition = ctx->getCommonObjects()->getSceneManager().getCameraManager().getMainCamera().getPosition();
+                  }
+                  areaDirty |= ImGui::SliderFloat3("Ligh Position", lightData.lightPosition.data, -10000.0f, 10000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                  if (ImGui::SliderFloat3("Ligh rotation", lightData.rotation.data, 0.0, 360.0, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+                    areaDirty = true;
+                    lightData.buildMatrix();
+                  }
+                  areaDirty |= ImGui::SliderFloat2("Ligh dimensions", lightData.dimensions.data, 0.0, 5000.0, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                  if (ImGui::Button("X2")) {
+                    lightData.lightRadiance *= 2.0f;
+                    areaDirty = true;
+                  }
+                  ImGui::SameLine();
+                  if (ImGui::Button("/2")) {
+                    lightData.lightRadiance *= 0.5f;
+                    areaDirty = true;
+                  }
+                  ImGui::TreePop();
+                }
+                ++lightId;
+              }
+              if (toRemove != -1)
+                _area.rectLightsData.erase(_area.rectLightsData.begin() + toRemove);
+              ImGui::TreePop();
+            }
+
             ImGui::TreePop();
           }
-          if (ImGui::TreeNode("Point Lights")) {
-            if (ImGui::Button("Add Point Light")) {
-              areaDirty = true;
-              area.pointLightsData.push_back(AreaLightDataPoint { });
-            }
-            uint lightId = 0;
-            uint toRemove = -1;
-            for (AreaLightDataPoint& lightData : area.pointLightsData) {
-              if (ImGui::TreeNode(std::to_string(lightId).c_str())) {
-                if (ImGui::Button("Delete")) {
-                  toRemove = lightId;
-                  areaDirty = true;
-                }
-           
+          if (ImGui::TreeNode("Volumetric")) {
+            areaDirty |= ImGui::DragFloat3("Transmittance Color", _area.transmittanceColor.data, 0.01f, 0.0f, MaxTransmittanceValue, "%.3f");
+            areaDirty |= ImGui::DragFloat("Transmittance Measurement Distance", &_area.transmittanceMeasurementDistanceMeters, 0.25f, 0.0f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+            areaDirty |= ImGui::DragFloat3("Single Scattering Albedo", _area.singleScatteringAlbedo.data, 0.01f, 0.0f, 1.0f, "%.3f");
 
-                areaDirty |= ImGui::SliderFloat3("Ligh Radiance", lightData.lightRadiance.data, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                if (ImGui::Button("Init camera position at player pos")) {
-                  lightData.lightPosition = ctx->getCommonObjects()->getSceneManager().getCameraManager().getMainCamera().getPosition();
-                }
-                areaDirty |= ImGui::SliderFloat3("Ligh Position", lightData.lightPosition.data, -10000.0f, 10000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                areaDirty |= ImGui::SliderFloat("Ligh Radius", &lightData.lightRadius, 0.01f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                if (ImGui::Button("X2")) {
-                  lightData.lightRadiance *= 2.0f;
-                  areaDirty = true;
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("/2")) {
-                  lightData.lightRadiance *= 0.5f;
-                  areaDirty = true;
-                }
-                ImGui::TreePop();
-              }
-              ++lightId;
-            }
-            if (toRemove != -1)
-              area.pointLightsData.erase(area.pointLightsData.begin() + toRemove);
+            areaDirty |= ImGui::DragFloat("Anisotropy", &_area.anisotropy, 0.01f, -.99f, .99f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            areaDirty |= ImGui::Checkbox("Enable Heterogeneous Fog", &_area.enableHeterogeneousFog);
+
+            areaDirty |= ImGui::DragFloat("Noise Field Spatial Frequency", &_area.noiseFieldSpatialFrequency, 0.01f, 0.0f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+            areaDirty |= ImGui::DragInt("Noise Field Number of Octaves", &_area.noiseFieldOctaves, 1.f, 0, 10);
+            areaDirty |= ImGui::DragFloat("Noise Field Density Scale", &_area.noiseFieldDensityScale, 0.01f, 0.0f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
             ImGui::TreePop();
           }
-   
+          if (areaDirty) {
+            _area.lightDirty = true;
+            ctx->getCommonObjects()->getSceneManager().getLightManager().resetLightFallback();
+          }
+        };
+
+        AreaData& currentArea = areaManager.getCurrentAreaData();
+
+        if (ImGui::TreeNode("Current Area")) {
+          drawArea(currentArea);
           ImGui::TreePop();
         }
-        if (ImGui::TreeNode("Volumetric")) {
-          areaDirty |= ImGui::DragFloat3("Transmittance Color", area.transmittanceColor.data, 0.01f, 0.0f, MaxTransmittanceValue, "%.3f");
-          areaDirty |= ImGui::DragFloat("Transmittance Measurement Distance", &area.transmittanceMeasurementDistanceMeters, 0.25f, 0.0f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-          areaDirty |= ImGui::DragFloat3("Single Scattering Albedo", area.singleScatteringAlbedo.data, 0.01f, 0.0f, 1.0f, "%.3f");
-
-          areaDirty |= ImGui::DragFloat("Anisotropy", &area.anisotropy, 0.01f, -.99f, .99f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-          areaDirty |= ImGui::Checkbox("Enable Heterogeneous Fog", &area.enableHeterogeneousFog);
-
-          areaDirty |= ImGui::DragFloat("Noise Field Spatial Frequency", &area.noiseFieldSpatialFrequency, 0.01f, 0.0f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-          areaDirty |= ImGui::DragInt("Noise Field Number of Octaves", &area.noiseFieldOctaves, 1.f, 0, 10);
-          areaDirty |= ImGui::DragFloat("Noise Field Density Scale", &area.noiseFieldDensityScale, 0.01f, 0.0f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-          ImGui::TreePop();
-        }
-
-        if (areaDirty) {
-          area.lightDirty = true;
-          ctx->getCommonObjects()->getSceneManager().getLightManager().resetLightFallback();
-        }
-
 
         ImGui::TreePop();
       }
@@ -3216,6 +3265,7 @@ namespace dxvk {
       ImGui::Unindent();
       ImGui::EndTabItem();
     }
+#endif
     // MHFZ end
     ImGui::PopItemWidth();
     ImGui::EndTabBar();
