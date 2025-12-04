@@ -85,8 +85,8 @@ type signNotZero(type x)                   \
   return x < type(0) ? type(-1) : type(1); \
 }
 
-GENERIC_SIGN_NOT_ZERO(float16_t)
-GENERIC_SIGN_NOT_ZERO(float)
+  GENERIC_SIGN_NOT_ZERO(float16_t)
+  GENERIC_SIGN_NOT_ZERO(float)
 
 #define GENERIC_INV_CLAMP_POW_5(type)                  \
 type invClampPow5(type x)                              \
@@ -94,11 +94,14 @@ type invClampPow5(type x)                              \
   return pow5(clamp(type(1) - x, type(0), type(1)));   \
 }
 
-GENERIC_INV_CLAMP_POW_5(float16_t)
-GENERIC_INV_CLAMP_POW_5(float)
+  GENERIC_INV_CLAMP_POW_5(float16_t)
+  GENERIC_INV_CLAMP_POW_5(float)
 
-// Performs a "safe" division operation avoiding division by zero by clamping the denominator
-// to a specified epsilon. May still result in infinities due to overflow.
+  // Performs a "safe" division operation avoiding division by zero by clamping the denominator
+  // to a specified epsilon. May still result in infinities due to overflow use clampedMaximumPositiveDivide
+  // or saferPositiveDivide to guard against infinities on overflow if desired.
+  // Requirements:
+  // Denominator must be greater than or equal to 0.
 #define GENERIC_SAFE_POSITIVE_DIVIDE(type, epsilonType)           \
 type safePositiveDivide(                                          \
   type numerator, type denominator, epsilonType epsilon)          \
@@ -106,31 +109,69 @@ type safePositiveDivide(                                          \
   return numerator / max(denominator, epsilon);                   \
 }
 
-GENERIC_SAFE_POSITIVE_DIVIDE(float16_t, float16_t)
-GENERIC_SAFE_POSITIVE_DIVIDE(float, float)
-GENERIC_SAFE_POSITIVE_DIVIDE(f16vec3, float16_t)
-GENERIC_SAFE_POSITIVE_DIVIDE(vec3, float)
+  GENERIC_SAFE_POSITIVE_DIVIDE(float16_t, float16_t)
+  GENERIC_SAFE_POSITIVE_DIVIDE(float, float)
+  GENERIC_SAFE_POSITIVE_DIVIDE(f16vec3, float16_t)
+  GENERIC_SAFE_POSITIVE_DIVIDE(vec3, float)
 
-// Performs a "safer" division operation than the safe division function by also clamping the numerator
-// based on the denominator and a specified maximum value to guard against overflows to infinity.
-#define GENERIC_SAFER_POSITIVE_DIVIDE(type, clampType)                    \
-type saferPositiveDivide(                                                 \
-  type numerator, type denominator, clampType epsilon, clampType maximum) \
-{                                                                         \
-  const type safeDenominator = max(denominator, epsilon);                 \
-                                                                          \
-  return min(numerator, safeDenominator * maximum) / safeDenominator;     \
+  // Performs a division operation which clamps the result based on a specified maximum value to guard against overflows to infinity.
+  // May still result in NaNs if divison by zero occurs, use saferPositiveDivide to guard against division by zero if desired.
+  // Requirements:
+  // Numerator must be greater than or equal to 0.
+  // Denominator must be greater than 0.
+#define GENERIC_CLAMPED_MAXIMUM_POSITIVE_DIVIDE(type, clampType) \
+type clampedMaximumPositiveDivide(                               \
+  type numerator, type denominator, clampType maximum)           \
+{                                                                \
+  /* Note: Relying on proper infinity behavior with the minimum function such that overflowing divisions */ \
+  /* will properly be clamped to the maximum value. This should be gauranteed, but in case it is not on  */ \
+  /* some implementations, the old approach of min(numerator, denominator * maximum) / denominator can   */ \
+  /* be used to avoid the overflow in most typical cases (though it still has the possibility to).       */ \
+  return min(numerator, denominator * maximum) / denominator;    \
 }
 
-GENERIC_SAFER_POSITIVE_DIVIDE(float16_t, float16_t)
-GENERIC_SAFER_POSITIVE_DIVIDE(float, float)
-GENERIC_SAFER_POSITIVE_DIVIDE(f16vec3, float16_t)
-GENERIC_SAFER_POSITIVE_DIVIDE(vec3, float)
+  GENERIC_CLAMPED_MAXIMUM_POSITIVE_DIVIDE(float16_t, float16_t)
+  GENERIC_CLAMPED_MAXIMUM_POSITIVE_DIVIDE(float, float)
+  GENERIC_CLAMPED_MAXIMUM_POSITIVE_DIVIDE(f16vec3, float16_t)
+  GENERIC_CLAMPED_MAXIMUM_POSITIVE_DIVIDE(vec3, float)
 
-// Normalizes a vector "safely" by falling back to another (ideally normalized) vector in the case of
-// an inability to normalize (to avoid NaNs from normalization). Also calculates
-// and outputs the length of the input vector. If the vector is invalid (the zero vector)
-// then the length will be 0.
+  // Performs a "safer" division operation than the safe division function by guarding
+  // against both divisions by zero via a specified epsilon and most overflows to infinity
+  // via a clamped maximum division.
+  // Requirements:
+  // Numerator and denominator must be greater than or equal to 0.
+#define GENERIC_SAFER_POSITIVE_DIVIDE(type, clampType)                      \
+type saferPositiveDivide(                                                   \
+  type numerator, type denominator, clampType epsilon, clampType maximum)   \
+{                                                                           \
+  const type safeDenominator = max(denominator, epsilon);                   \
+                                                                            \
+  return clampedMaximumPositiveDivide(numerator, safeDenominator, maximum); \
+}
+
+  GENERIC_SAFER_POSITIVE_DIVIDE(float16_t, float16_t)
+  GENERIC_SAFER_POSITIVE_DIVIDE(float, float)
+  GENERIC_SAFER_POSITIVE_DIVIDE(f16vec3, float16_t)
+  GENERIC_SAFER_POSITIVE_DIVIDE(vec3, float)
+
+  // Performs a multiplication operation which clamps the result based on a specified maximum value to guard against overflows to infinity.
+  // Requirements:
+  // a and b must be greater than or equal to 0.
+#define GENERIC_CLAMPED_MAXIMUM_POSITIVE_MULTIPLY(type, clampType)     \
+type clampedMaximumPositiveMultiply(type a, type b, clampType maximum) \
+{                                                                      \
+  return min(a * b, type(maximum));                                    \
+}
+
+  GENERIC_CLAMPED_MAXIMUM_POSITIVE_MULTIPLY(float16_t, float16_t)
+  GENERIC_CLAMPED_MAXIMUM_POSITIVE_MULTIPLY(float, float)
+  GENERIC_CLAMPED_MAXIMUM_POSITIVE_MULTIPLY(f16vec3, float16_t)
+  GENERIC_CLAMPED_MAXIMUM_POSITIVE_MULTIPLY(vec3, float)
+
+  // Normalizes a vector "safely" by falling back to another (ideally normalized) vector in the case of
+  // an inability to normalize (to avoid NaNs from normalization). Also calculates
+  // and outputs the length of the input vector. If the vector is invalid (the zero vector)
+  // then the length will be 0.
 #define GENERIC_SAFE_NORMALIZE_GET_LENGTH(type, lengthType)                                  \
 type safeNormalizeGetLength(type vector, type fallbackVector, inout lengthType vectorLength) \
 {                                                                                            \
@@ -144,10 +185,10 @@ type safeNormalizeGetLength(type vector, type fallbackVector, inout lengthType v
   return vector / vectorLength;                                                              \
 }
 
-GENERIC_SAFE_NORMALIZE_GET_LENGTH(f16vec3, float16_t)
-GENERIC_SAFE_NORMALIZE_GET_LENGTH(vec3, float)
+  GENERIC_SAFE_NORMALIZE_GET_LENGTH(f16vec3, float16_t)
+  GENERIC_SAFE_NORMALIZE_GET_LENGTH(vec3, float)
 
-// Same as the get length variant of the safe normalize function, just without a length output.
+  // Same as the get length variant of the safe normalize function, just without a length output.
 #define GENERIC_SAFE_NORMALIZE(type, lengthType)                      \
 type safeNormalize(type vector, type fallbackVector)                  \
 {                                                                     \
@@ -156,8 +197,8 @@ type safeNormalize(type vector, type fallbackVector)                  \
   return safeNormalizeGetLength(vector, fallbackVector, dummyLength); \
 }
 
-GENERIC_SAFE_NORMALIZE(f16vec3, float16_t)
-GENERIC_SAFE_NORMALIZE(vec3, float)
+  GENERIC_SAFE_NORMALIZE(f16vec3, float16_t)
+  GENERIC_SAFE_NORMALIZE(vec3, float)
 
 #define GENERIC_SQUARE_LENGTH(type, vectorType) \
 type squareLength(vectorType x)                 \
@@ -165,14 +206,14 @@ type squareLength(vectorType x)                 \
   return dot(x, x);                             \
 }
 
-GENERIC_SQUARE_LENGTH(float16_t, f16vec2)
-GENERIC_SQUARE_LENGTH(float16_t, f16vec3)
-GENERIC_SQUARE_LENGTH(float16_t, f16vec4)
-GENERIC_SQUARE_LENGTH(float, vec2)
-GENERIC_SQUARE_LENGTH(float, vec3)
-GENERIC_SQUARE_LENGTH(float, vec4)
+  GENERIC_SQUARE_LENGTH(float16_t, f16vec2)
+  GENERIC_SQUARE_LENGTH(float16_t, f16vec3)
+  GENERIC_SQUARE_LENGTH(float16_t, f16vec4)
+  GENERIC_SQUARE_LENGTH(float, vec2)
+  GENERIC_SQUARE_LENGTH(float, vec3)
+  GENERIC_SQUARE_LENGTH(float, vec4)
 
-float2 cartesianDirectionToLatLongSphere(float3 direction)
+  float2 cartesianDirectionToLatLongSphere(float3 direction)
 {
   float theta = acos(direction.z);
   float phi = atan2(direction.x, direction.y);
@@ -256,8 +297,8 @@ GENERIC_SAFE_ORTHONORMALIZE(vec3)
 mat3 inverse(mat3 m)
 {
   float det = m[0][0] * (m[1][1] * m[2][2] - m[2][1] * m[1][2]) -
-              m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
-              m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+    m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
+    m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
 
   float invdet = 1.f / det;
 
@@ -338,12 +379,12 @@ f16vec4 quaternionMultiply(f16vec4 q1, f16vec4 q2, bool signBitIsParity = false)
 // Note that the vectors this function returns may form an improper rotation when converted to a transformation due to a swap of
 // handedness. No guarantees for left or right handedness are made as it depends on the triangle's UV layout.
 void genTangSpace(vec2 uvs[3],
-                  vec3 pos[3],
-                  f16vec3 normal,
-                  out f16vec3 tangent,
-                  out f16vec3 bitangent,
-                  out f16vec3 rawTangentOut,
-                  out f16vec3 rawBitangentOut)
+  vec3 pos[3],
+  f16vec3 normal,
+  out f16vec3 tangent,
+  out f16vec3 bitangent,
+  out f16vec3 rawTangentOut,
+  out f16vec3 rawBitangentOut)
 {
   // Compute triangle partial derivatives
 
@@ -375,7 +416,7 @@ void genTangSpace(vec2 uvs[3],
   // rawTangent and rawBitangent are too large for fp16, but we need the non-uniform component of the scale for POM.
   // Here, we scale both down by the length of the larger vector.
   float largerRawLength = sqrt(max(squareLength(rawTangent), squareLength(rawBitangent)));
-  
+
   rawTangentOut = rawTangent / largerRawLength;
   rawBitangentOut = rawBitangent / largerRawLength;
 
@@ -446,7 +487,7 @@ f16vec3 getBentNormal(f16vec3 geometryNormal, f16vec3 shadingNormal, f16vec3 vie
     // Note: Fall back to the geometry normal if if normalization is not possible.
     return safeNormalize(newVector, geometryNormal);
   }
-  
+
   return shadingNormal;
 }
 
@@ -474,7 +515,7 @@ f16vec4 getReflectionQuaternion(f16vec3 normal)
 
   // Calculate the quaternion components
   float16_t sinHalfAngle = sin(halfAngle);
-    
+
   f16vec4 q;
   q.x = normal.x * sinHalfAngle;
   q.y = normal.y * sinHalfAngle;
@@ -578,7 +619,7 @@ f16vec3 quaternionToNormal(f16vec4 q)
 
 // Because quaternion == -quaternion, we can use the sign bit of the w
 // component of the quaternion to encode the handedness of the original TBN matrix.
-bool isQuatRightHanded(f16vec4 q) 
+bool isQuatRightHanded(f16vec4 q)
 {
   return float16BitsToUint16(q.w) & 0x8000;
 }
@@ -646,3 +687,4 @@ f16vec4 getIdentityQuaternion()
 {
   return f16vec4(0.h, 0.h, 0.h, 1.h);
 }
+

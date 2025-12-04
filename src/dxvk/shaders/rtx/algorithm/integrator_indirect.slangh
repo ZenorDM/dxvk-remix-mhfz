@@ -22,6 +22,7 @@
 #pragma once
 
 #include "rtx/algorithm/path_state.slangh"
+#include "rtx/utility/math.slangh"
 #include "rtx/utility/noise.slangh"
 #include "rtx/utility/color.slangh"
 #include "rtx/utility/packing.slangh"
@@ -79,13 +80,13 @@ PathState pathStateCreateEmpty(GeometryFlags geometryFlags)
 // Helper function to accumulate attenuation or other throughputs into the Path State throughput.
 void accumulateThroughput(inout PathState pathState, vec3 throughput)
 {
-  pathState.throughput *= throughput;
+  pathState.throughput = clampedMaximumPositiveMultiply(pathState.throughput, throughput, kThroughputClampedDivisionMaximum);
 }
 
 // Overload for accumulating throughput for single-channel values.
 void accumulateThroughput(inout PathState pathState, float throughput)
 {
-  pathState.throughput *= throughput;
+  accumulateThroughput(pathState, vec3(throughput));
 }
 
 // Helper function to accumulate radiance the Path State.
@@ -771,7 +772,11 @@ void integratePathVertex(
         // Note: Factor the probability of continuing the path into the throughput. This causes odd brightness
         // in denoising when the continue probability is very low, but this math has been validated to be
         // correct as far as I can tell.
-        continuationThroughput /= continueProbability;
+        // Clamped division used here rather than saferPositiveDivide as this branch should never be taken if
+        // the continue probability is zero, meaning that only an overflow to infinity should be possible in
+        // normal circumstances if the continue probability is very small.
+
+        continuationThroughput = clampedMaximumPositiveDivide(continuationThroughput, continueProbability, kThroughputClampedDivisionMaximum);
       }
     }
 

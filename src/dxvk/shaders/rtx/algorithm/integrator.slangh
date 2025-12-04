@@ -155,7 +155,7 @@ Ray sampleDirection(
 
   if (isValidValue(directionSampleThroughput))
   {
-    throughput *= directionSampleThroughput;
+    throughput = clampedMaximumPositiveMultiply(throughput, directionSampleThroughput, kThroughputClampedDivisionMaximum);
   }
   else
   {
