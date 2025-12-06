@@ -67,6 +67,8 @@
 #include "rtx_matrix_helpers.h"
 #include "../util/util_fastops.h"
 
+#include "../util/util_globaltime.h"
+
 // Destructor requires the struct definitions
 #include "rtx_sky.h"
 
@@ -183,6 +185,8 @@ namespace dxvk {
     checkShaderExecutionReorderingSupport();
     checkNeuralRadianceCacheSupport();
     reportCpuSimdSupport();
+
+    GlobalTime::get().init(RtxOptions::timeDeltaBetweenFrames());
   }
 
   RtxContext::~RtxContext() {
@@ -516,6 +520,9 @@ namespace dxvk {
         takeScreenshot("orgImage", targetImage);
       }
 
+      RtxParticleSystemManager& particles = m_device->getCommon()->metaParticleSystem();
+      particles.submitDrawState(this);
+
       this->spillRenderPass(false);
 
       getCommonObjects()->getTextureManager().submitTexturesToDeviceLocal(this, m_execBarriers, m_execAcquires);
@@ -708,6 +715,8 @@ namespace dxvk {
       // Fallback inject (is a no-op if already injected this frame, or no valid RT scene)
       injectRTX(cachedReflexFrameId, targetImage);
     }
+
+    GlobalTime::get().update();
   }
 
   // Called right before D3D9 present

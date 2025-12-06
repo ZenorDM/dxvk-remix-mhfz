@@ -238,6 +238,10 @@ namespace dxvk {
     void setOption(
       const std::string& key,
       const Vector2& value);
+
+    void setOption(
+      const std::string& key,
+      const Vector4& value);
     // NV-DXVK end
 
     /**
@@ -381,6 +385,10 @@ namespace dxvk {
     static bool parseOptionValue(
       const std::string& value,
       Vector2& result);
+
+    static bool parseOptionValue(
+     const std::string& value,
+     Vector4& result);
 
     static bool parseOptionValue(
       const std::string& value,

@@ -22,6 +22,84 @@
 #pragma once
 
 #include "rtx/utility/common.slangh"
+#include "rtx/utility/packing.slangh"
+
+// Stateless Random Functions
+
+// "Prospector"-style 32 bit integer hashing function
+// Low bias parameters from: https://github.com/skeeto/hash-prospector/issues/19#issuecomment-1120105785
+// Attempts to map an input integer to a nearly uniform random output integer, useful mainly when white noise-esque
+// random is desired without involving more complex state. Should be superior to most other 32 bit integer hashing
+// functions using this amount of shifting/xoring/multiplying while also being very cheap. May be slightly worse than
+// more complex forms using more coeffecients/shifting, but for graphics purposes this is more than enough.
+uint uintHash(uint x)
+{
+  x ^= x >> 16;
+  x *= 0x21f0aaadU;
+  x ^= x >> 15;
+  x *= 0x735a2d97U;
+  x ^= x >> 15;
+  return x;
+}
+
+// Hashes a uint2 into a single uint
+uint uintHash(uint2 x)
+{
+  return uintHash(x.x ^ uintHash(x.y));
+}
+
+// Hashes a uint3 into a single uint
+uint uintHash(uint3 x)
+{
+  return uintHash(x.x ^ uintHash(x.y) ^ uintHash(x.z));
+}
+
+// Hashes a uint4 into a single uint
+uint uintHash(uint4 x)
+{
+  return uintHash(x.x ^ uintHash(x.y) ^ uintHash(x.z) ^ uintHash(x.w));
+}
+
+// Generates a uniformly random float in the range [0, 1) from a 1D input seed
+float randomFloat(uint x)
+{
+  return unorm23ToFloat(uintHash(x));
+}
+
+// Generates a uniformly random float in the range [0, 1) from a 2D input seed
+float randomFloat(uint2 x)
+{
+  return unorm23ToFloat(uintHash(x));
+}
+
+// Generates a uniformly random float in the range [0, 1) from a 3D input seed
+float randomFloat(uint3 x)
+{
+  return unorm23ToFloat(uintHash(x));
+}
+
+// Generates a uniformly random float in the range [0, 1) from a 4D input seed
+float randomFloat(uint4 x)
+{
+  return unorm23ToFloat(uintHash(x));
+}
+
+// Generates a uniformly random vec3 in the range [0, 1) from a 3D input seed
+vec3 randomFloat3(uint3 x)
+{
+  // Note: Create a chain of hashes much like sequential iterations in a stateful
+  // RNG function to get ideally not-correlated values on each axis for the combined
+  // 3D input seed.
+  const uint hashX = uintHash(x);
+  const uint hashY = uintHash(hashX);
+  const uint hashZ = uintHash(hashY);
+
+  return vec3(
+    unorm23ToFloat(hashX),
+    unorm23ToFloat(hashY),
+    unorm23ToFloat(hashZ)
+  );
+}
 
 // 32 bit Jenkin's hash
 // http://burtleburtle.net/bob/hash/integer.html

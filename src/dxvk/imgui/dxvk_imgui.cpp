@@ -189,9 +189,7 @@ namespace dxvk {
     {"ignorebakedlightingtextures","Ignore Baked Lighting Textures (optional)", &RtxOptions::Get()->ignoreBakedLightingTexturesObject()},
     {"ignorealphaontextures","Ignore Alpha Channel of Textures (optional)", &RtxOptions::Get()->ignoreAlphaOnTexturesObject()},
     {"raytracedRenderTargetTextures","Raytraced Render Target Textures (optional)", &RtxOptions::Get()->raytracedRenderTargetTexturesObject(), ImGUI::kTextureFlagsRenderTarget},
-    // MHFZ start
-    {"customBlendtextures", "Custom Blend Texture (optional)", &RtxOptions::Get()->customBlendTexturesObject()}
-    // MHFZ end
+    {"particleemittertextures","Particle Emitters (optional)", &RtxOptions::particleEmitterTexturesObject()}
   };
 
   ImGui::ComboWithKey<RenderPassGBufferRaytraceMode> renderPassGBufferRaytraceModeCombo {
@@ -3813,6 +3811,8 @@ namespace dxvk {
 
       ImGui::Unindent();
     }
+
+    RtxParticleSystemManager::showImguiSettings();
 
     if (ImGui::CollapsingHeader("Global Volumetrics", collapsingHeaderClosedFlags)) {
       ImGui::Indent();

@@ -45,6 +45,7 @@
 #include "dxvk_scoped_annotation.h"
 #include "rtx_lights_data.h"
 #include "rtx_light_utils.h"
+#include "rtx_particle_system.h"
 
 namespace dxvk {
   SceneManager::SceneManager(DxvkDevice* device)
@@ -605,9 +606,8 @@ namespace dxvk {
       overrideMaterialData = &sHighlightMaterialData;
     }
 
-    uint64_t instanceId = UINT64_MAX;
     if (pReplacements != nullptr) {
-      instanceId = drawReplacements(ctx, &input, pReplacements, overrideMaterialData);
+      drawReplacements(ctx, &input, pReplacements, overrideMaterialData);
     } else {
       // MHFZ start : add hide mesh features to by pass current mesh processDrawCallState add offset to world matrix
       LegacyManager& legacyManager = m_device->getLegacyManager();
@@ -621,10 +621,10 @@ namespace dxvk {
         Matrix4& viewMatrix = newDrawCallState.transformData.worldToView;
         newDrawCallState.transformData.objectToWorld[3] = newDrawCallState.transformData.objectToWorld[3] + Vector4(legacyMeshLayer->offset, 0);
         newDrawCallState.transformData.objectToView = viewMatrix * newDrawCallState.transformData.objectToWorld;
-        instanceId = processDrawCallState(ctx, newDrawCallState, overrideMaterialData, legacyMeshLayer);
+        processDrawCallState(ctx, newDrawCallState, overrideMaterialData, legacyMeshLayer);
       } else {
           // MHFZ end
-          instanceId = processDrawCallState(ctx, input, overrideMaterialData, legacyMeshLayer);
+          processDrawCallState(ctx, input, overrideMaterialData, legacyMeshLayer);
         }
       // MHFZ start : if the mesh is a custom blend we can hide hole by render an opaque mesh with a hard alpha cut
       if (input.testCategoryFlags(InstanceCategories::CustomBlend) && input.geometryData.boundingBox.canBeCustomBlend && legacyMeshLayer && legacyMeshLayer->testFeatures(LegacyMeshFeature::FillHole)) {
@@ -710,9 +710,9 @@ namespace dxvk {
     m_lightManager.addLight(rtLight, input, RtLightAntiCullingType::MeshReplacement);
   }
 
-  uint64_t SceneManager::drawReplacements(Rc<DxvkContext> ctx, const DrawCallState* input, const std::vector<AssetReplacement>* pReplacements, const MaterialData* overrideMaterialData) {
+  RtInstance* SceneManager::drawReplacements(Rc<DxvkContext> ctx, const DrawCallState* input, const std::vector<AssetReplacement>* pReplacements, const MaterialData* overrideMaterialData) {
     ScopedCpuProfileZone();
-    uint64_t rootInstanceId = UINT64_MAX;
+    RtInstance* pRootInstance = nullptr;
     // Detect replacements of meshes that would have unstable hashes due to the vertex hash using vertex data from a shared vertex buffer.
     // TODO: Once the vertex hash only uses vertices referenced by the index buffer, this should be removed.
     const bool highlightUnsafeReplacement = RtxOptions::Get()->getHighlightUnsafeReplacementModeEnabled() &&
@@ -720,7 +720,7 @@ namespace dxvk {
     if (!pReplacements->empty() && (*pReplacements)[0].includeOriginal) {
       DrawCallState newDrawCallState(*input);
       newDrawCallState.categories = (*pReplacements)[0].categories.applyCategoryFlags(newDrawCallState.categories);
-      rootInstanceId = processDrawCallState(ctx, newDrawCallState, overrideMaterialData);
+      pRootInstance = processDrawCallState(ctx, newDrawCallState, overrideMaterialData);
     }
     for (auto&& replacement : *pReplacements) {
       if (replacement.type == AssetReplacement::eMesh) {
@@ -756,15 +756,24 @@ namespace dxvk {
             overrideMaterialData = &sHighlightMaterialData;
           }
         }
-        uint64_t instanceId = processDrawCallState(ctx, newDrawCallState, overrideMaterialData);
-        if (rootInstanceId == UINT64_MAX) {
-          rootInstanceId = instanceId;
+        RtInstance* pInstance = processDrawCallState(ctx, newDrawCallState, overrideMaterialData);
+
+        const bool isParticleSystem = replacement.particleSystem.has_value();
+
+        if (pInstance && isParticleSystem) {
+          // We dont draw the mesh emitters for particle systems
+          pInstance->setHidden(true);
+
+          RtxParticleSystemManager& particleSystem = device()->getCommon()->metaParticleSystem();
+          particleSystem.spawnParticles(ctx.ptr(), replacement.particleSystem.value(), pInstance->getVectorIdx(), newDrawCallState, overrideMaterialData);
+        } else if (pRootInstance == nullptr) {
+          pRootInstance = pInstance;
         }
       }
     }
     for (auto&& replacement : *pReplacements) {
       if (replacement.type == AssetReplacement::eLight) {
-        if (rootInstanceId == UINT64_MAX) {
+        if (pRootInstance == nullptr) {
           // TODO(TREX-1141) if we refactor instancing to depend on the pre-replacement drawcall instead
           // of the fully processed draw call, we can remove this requirement.
           Logger::err(str::format(
@@ -775,14 +784,14 @@ namespace dxvk {
         }
         if (replacement.lightData.has_value()) {
           RtLight localLight = replacement.lightData->toRtLight();
-          localLight.setRootInstanceId(rootInstanceId);
+          localLight.setRootInstanceId(pRootInstance == nullptr ? UINT64_MAX : pRootInstance->getId());
           localLight.applyTransform(input->getTransformData().objectToWorld);
           m_lightManager.addLight(localLight, *input, RtLightAntiCullingType::MeshReplacement);
         }
       }
     }
 
-    return rootInstanceId;
+    return pRootInstance;
   }
 
   void SceneManager::clearFogState() {
@@ -921,14 +930,14 @@ namespace dxvk {
   }
 
   // MHFZ start : pass legacy mesh if found null ortherwise
-  uint64_t SceneManager::processDrawCallState(Rc<DxvkContext> ctx, const DrawCallState& drawCallState, const MaterialData* overrideMaterialData, LegacyMeshLayer* legacyMeshLayer) {
+  RtInstance* SceneManager::processDrawCallState(Rc<DxvkContext> ctx, const DrawCallState& drawCallState, const MaterialData* overrideMaterialData, LegacyMeshLayer* legacyMeshLayer) {
   // MHFZ end
     ScopedCpuProfileZone();
     const bool usingOverrideMaterial = overrideMaterialData != nullptr;
     const MaterialData& renderMaterialData =
       usingOverrideMaterial ? *overrideMaterialData : drawCallState.getMaterialData();
     if (renderMaterialData.getIgnored()) {
-      return UINT64_MAX;
+      return nullptr;
     }
     ObjectCacheState result = ObjectCacheState::kInvalid;
     BlasEntry* pBlas = nullptr;
@@ -993,7 +1002,12 @@ namespace dxvk {
       }
     }
 
-    return instance ? instance->getId() : UINT64_MAX;
+    if (instance && drawCallState.getCategoryFlags().test(InstanceCategories::ParticleEmitter)) {
+      RtxParticleSystemManager& particleSystem = device()->getCommon()->metaParticleSystem();
+      particleSystem.spawnParticles(ctx.ptr(), RtxParticleSystemManager::createGlobalParticleSystemDesc(), instance->getVectorIdx(), drawCallState, nullptr);
+    }
+
+    return instance;
   }
 
   // MHFZ start : pass legacy mesh if found null ortherwise
@@ -1611,6 +1625,9 @@ namespace dxvk {
       m_opacityMicromapManager = nullptr;
       Logger::info("[RTX] Opacity Micromap: disabled");
     }
+
+    RtxParticleSystemManager& particles = m_device->getCommon()->metaParticleSystem();
+    particles.simulate(ctx.ptr());
 
     m_instanceManager.findPortalForVirtualInstances(m_cameraManager, m_rayPortalManager);
     m_instanceManager.createViewModelInstances(ctx, m_cameraManager, m_rayPortalManager);

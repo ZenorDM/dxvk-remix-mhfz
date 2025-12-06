@@ -479,6 +479,14 @@ void UsdMod::Impl::processLight(Args& args, const pxr::UsdPrim& lightPrim, const
     args.meshes.emplace_back(lightData.value(), replacementToObject);
   }
 }
+inline float4 toFloat4(const pxr::GfVec4f& v) {
+  float4 f;
+  f.x = v[0];
+  f.y = v[1];
+  f.z = v[2];
+  f.w = v[3];
+  return f;
+}
 
 void UsdMod::Impl::processPointInstancer(Args& args, const pxr::UsdPrim& prim) {
   const pxr::UsdGeomPointInstancer instancer(prim);
