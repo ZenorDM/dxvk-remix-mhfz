@@ -50,6 +50,30 @@ namespace dxvk {
       uint32_t particleOffset;
     };
 
+    class ConservativeCounter : public RcObject {
+      const uint32_t m_framesInFlight;
+      const uint32_t m_upperBound;
+
+      uint32_t m_frameLastCounted = kInvalidFrameIndex;
+
+      Rc<DxvkBuffer> m_countGpu;
+      Rc<DxvkBuffer> m_countsHost; // copy target to access counts on the CPU - buffer contains entire "frames in flight" data (offset)
+
+      ConservativeCounter() = delete;
+
+    public:
+      int cachedTotal = 0;
+
+      ConservativeCounter(DxvkContext* ctx, const uint32_t framesInFlight, const uint32_t upperBound);
+
+      const Rc<DxvkBuffer>& getGpuCountBuffer() const {
+        return m_countGpu;
+      }
+
+      uint32_t preSimulation(DxvkContext* ctx, uint32_t newAdditions, uint32_t frameIdx);
+      void postSimulation(DxvkContext* ctx, uint32_t frameIdx);
+    };
+
     struct ParticleSystem {
 
     private:
@@ -57,6 +81,7 @@ namespace dxvk {
       Rc<DxvkBuffer> m_spawnContextParticleMapBuffer;
       Rc<DxvkBuffer> m_vb;
       Rc<DxvkBuffer> m_ib;
+      Rc<ConservativeCounter> m_count;
       XXH64_hash_t m_cachedHash = kEmptyHash;
 
     public:
@@ -72,7 +97,6 @@ namespace dxvk {
 
       std::mt19937 generator;
 
-      uint32_t particleWriteOffset = 0;
       uint32_t generationIdx = 0;
 
       ParticleSystem() = delete;
@@ -88,6 +112,10 @@ namespace dxvk {
 
       uint32_t getIndicesPerParticle() const {
         return context.desc.enableMotionTrail ? 18 : 6;
+      }
+
+      const Rc<ConservativeCounter>& getCounter() const {
+        return m_count;
       }
 
       const Rc<DxvkBuffer>& getParticlesBuffer() const {
@@ -110,11 +138,11 @@ namespace dxvk {
         return generationIdx;
       }
 
-      uint32_t getVertexCount() const {
+      uint32_t getMaxVertexCount() const {
         return context.desc.maxNumParticles * getVerticesPerParticle();
       }
 
-      uint32_t getIndexCount() const {
+      uint32_t getMaxIndexCount() const {
         return context.desc.maxNumParticles * getIndicesPerParticle();
       }
 
@@ -132,7 +160,8 @@ namespace dxvk {
     std::vector<SpawnContext> m_spawnContexts;
     bool m_initialized = false;
 
-    RTX_OPTION("rtx.particles", bool, enable, true, "Enables dust particle simulation and rendering.");
+    RTX_OPTION("rtx.particles", bool, enable, true, "Enables particle simulation and rendering.");
+    RTX_OPTION("rtx.particles", bool, enableSpawning, true, "Controls whether or not any particle system can currently spawn new particles.");
     RTX_OPTION("rtx.particles", float, timeScale, 1.f, "Time modifier, can be used to slow/speed up time.");
 
     RTX_OPTION("rtx.particles.globalPreset", int, spawnRatePerSecond, 100, "Number of particles (per system) to spawn per second on average.");
