@@ -73,6 +73,8 @@ namespace dxvk {
 
     void update();
 
+    void setDay();
+
     uint32_t getCurrentAreaID();
     AreaData& getAreaData(uint32_t area);
     AreaData& getCurrentAreaData();

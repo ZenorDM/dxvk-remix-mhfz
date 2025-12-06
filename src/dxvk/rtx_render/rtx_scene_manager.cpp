@@ -1188,7 +1188,7 @@ namespace dxvk {
         AreaManager& areaManager = ctx->getDevice()->getAreaManager();
         if (legacyMaterialLayer) {
           softBlendFactor = legacyMaterialLayer->softBlendFactor;
-          normalIntensity = legacyMaterialLayer->normalStrenght;
+          normalIntensity = legacyMaterialLayer->normalStrength;
           emissiveIntensity = legacyMaterialLayer->emissiveIntensity;
 
           roughnessConstant = legacyMaterialLayer->roughnessBias;
@@ -1239,55 +1239,7 @@ namespace dxvk {
         thinFilmEnable = defaults.enableThinFilm();
         alphaIsThinFilmThickness = defaults.alphaIsThinFilmThickness();
         thinFilmThicknessConstant = defaults.thinFilmThicknessConstant();
-        // MHFZ start : if legacyMaterialLayer we can use SSS and thin film with legacy
-        if (legacyMaterialLayer) {
-
-          thinFilmEnable = legacyMaterialLayer->thinFilmEnable;
-          alphaIsThinFilmThickness = legacyMaterialLayer->alphaIsThinFilmThickness;
-          thinFilmThicknessConstant = legacyMaterialLayer->thinFilmThicknessConstant;
-          subsurfaceMeasurementDistance = legacyMaterialLayer->subsurfaceMeasurementDistance * RtxOptions::SubsurfaceScattering::surfaceThicknessScale();
-
-          const bool isSubsurfaceScatteringDiffusionProfile = legacyMaterialLayer->isSubsurfaceDiffusionProfile;
-
-         
-          if ((RtxOptions::SubsurfaceScattering::enableThinOpaque() && subsurfaceMeasurementDistance > 0.0f) ||
-            (RtxOptions::SubsurfaceScattering::enableDiffusionProfile() && isSubsurfaceScatteringDiffusionProfile)) {
-
-            subsurfaceTransmittanceColor = legacyMaterialLayer->subsurfaceTransmittanceColor;
-            subsurfaceVolumetricAnisotropy = legacyMaterialLayer->subsurfaceVolumetricAnisotropy;
-
-            if (isSubsurfaceScatteringDiffusionProfile){
-              subsurfaceSingleScatteringAlbedo = legacyMaterialLayer->subsurfaceRadius;
-              subsurfaceMaxSampleRadius = std::max(0.F, legacyMaterialLayer->subsurfaceMaxSampleRadius);
-              subsurfaceRadiusScale = std::max(legacyMaterialLayer->subsurfaceRadiusScale, 1e-5f);
-              assert(subsurfaceRadiusScale > 0);
-            }
-            else {
-              assert(subsurfaceMeasurementDistance > 0);
-
-              subsurfaceSingleScatteringAlbedo = legacyMaterialLayer->subsurfaceSingleScatteringAlbedo;
-              subsurfaceMaxSampleRadius = 0;
-              subsurfaceRadiusScale = -1;
-              assert(subsurfaceRadiusScale < 0);  // if < 0, then shaders assume that
-              // this material is not SubsurfaceScatter, but just SingleScatter
-              // same here, but <0.F
-            }
-
-            const auto subsurfaceMaterial = RtSubsurfaceMaterial {
-              subsurfaceTransmittanceTextureIndex,
-              subsurfaceThicknessTextureIndex,
-              subsurfaceSingleScatteringAlbedoTextureIndex,
-              subsurfaceTransmittanceColor,
-              subsurfaceMeasurementDistance,
-              subsurfaceSingleScatteringAlbedo,
-              subsurfaceVolumetricAnisotropy,
-              subsurfaceRadiusScale,
-              subsurfaceMaxSampleRadius,
-            };
-            subsurfaceMaterialIndex = m_surfaceMaterialExtensionCache.track(subsurfaceMaterial);
-          }
-        }
-        // MHFZ end
+        
       } else if (renderMaterialDataType == MaterialDataType::Opaque) {
         const auto& opaqueMaterialData = renderMaterialData.getOpaqueMaterialData();
 

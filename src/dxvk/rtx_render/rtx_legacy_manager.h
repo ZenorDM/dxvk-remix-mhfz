@@ -78,31 +78,12 @@ namespace dxvk {
 
     float roughnessBias = 0.0f;
     float metallicBias = 0.0f;
-    float normalStrenght = 1.0f;
+    float normalStrength = 1.0f;
 
     float displacementFactor = 1.0f;
+    float displacementNoise = 0.0f;
 
     float emissiveIntensity = 1.0f;
-
-    Vector3 subsurfaceTransmittanceColor;
-    float subsurfaceMeasurementDistance;
-    Vector3 subsurfaceSingleScatteringAlbedo; // scatteringCoefficient / attenuationCoefficient
-    float subsurfaceVolumetricAnisotropy;
-
-    bool isSubsurfaceDiffusionProfile;
-
-    // Cache Volumetric Properties
-    Vector3 subsurfaceVolumetricAttenuationCoefficient; // scatteringCoefficient + absorptionCoefficient
-    // Currently no need to cache scattering and absorption coefficient for single scattering simulation
-
-    // SSS properties using Diffusion Profile
-    Vector3 subsurfaceRadius;
-    float subsurfaceRadiusScale;
-    float subsurfaceMaxSampleRadius;
-
-    bool thinFilmEnable;
-    bool alphaIsThinFilmThickness;
-    float thinFilmThicknessConstant;
 
     int alphaTestReferenceValue = 0;
 
@@ -210,10 +191,17 @@ namespace dxvk {
     LegacyMaterialLayer* getLegacyMaterialLayer(D3D9CommonTexture* texture);
     LegacyMeshLayer* getLegacyMeshLayer(XXH64_hash_t meshHash);
 
+    void pushDirtyMaterialLayer(uint32_t);
+    void pushDirtyMeshLayer(XXH64_hash_t);
+
   private:
 
     std::unordered_map<D3D9CommonTexture*, LegacyTexture> m_textures[TextureLoadThreadCount]; // Orihandle to texture
     std::unordered_map<uint32_t, LegacyMaterialLayer> m_legacyMaterialsLayer;
     std::unordered_map<XXH64_hash_t, LegacyMeshLayer> m_legacyMeshesLayer;
+
+    std::unordered_set< uint32_t> m_legacyMaterialsLayerModified;
+    std::unordered_set< XXH64_hash_t> m_legacyMeshesLayerModified;
+
   };
 }

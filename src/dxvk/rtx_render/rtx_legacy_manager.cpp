@@ -3,7 +3,13 @@
 #include "rtx_asset_data_manager.h"
 #include "dxvk_device.h"
 #include "rtx_texture_manager.h"
-#include "../../util/util_json.h"
+
+#include "../../lssusd/usd_include_begin.h"
+#include <pxr/usd/usd/stage.h>
+#include <pxr/usd/usdGeom/mesh.h>
+#include "../../lssusd/usd_include_end.h"
+
+using namespace pxr;
 
 namespace dxvk {
   
@@ -299,173 +305,257 @@ namespace dxvk {
 
   }
 
-  void to_json(json& j, const LegacyMaterialLayer& p) {
-    j = json { { "RoughnessBias", p.roughnessBias },
-              {"MetallicBias", p.metallicBias} ,
-              {"EmissiveIntensity", p.emissiveIntensity} ,
-              {"NormalStrenght", p.normalStrenght},
+  namespace {
+    void saveMaterialLayer(UsdStageRefPtr stage, const LegacyMaterialLayer& materialLayer) {
+      UsdPrim material = stage->DefinePrim(SdfPath { "/MaterialLayer" });
+      auto roughnessBiasAttr = material.CreateAttribute(
+      TfToken("roughnessBias"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      roughnessBiasAttr.Set(materialLayer.roughnessBias);
 
-              {"DisplacementFactor", p.displacementFactor},
+      auto metallicBiasAttr = material.CreateAttribute(
+      TfToken("metallicBias"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      metallicBiasAttr.Set(materialLayer.metallicBias);
 
-              {"SubsurfaceTransmittanceColor", p.subsurfaceTransmittanceColor},
-              {"SubsurfaceMeasurementDistance", p.subsurfaceMeasurementDistance},
-              {"SubsurfaceSingleScatteringAlbedo", p.subsurfaceSingleScatteringAlbedo},
-              {"SubsurfaceVolumetricAnisotropy", p.subsurfaceVolumetricAnisotropy},
-              {"IsSubsurfaceDiffusionProfile", p.isSubsurfaceDiffusionProfile},
-              {"SubsurfaceRadius", p.subsurfaceRadius},
-              {"SubsurfaceRadiusScale", p.subsurfaceRadiusScale},
-              {"SubsurfaceMaxSampleRadius", p.subsurfaceMaxSampleRadius},
+      auto normalStrengthAttr = material.CreateAttribute(
+      TfToken("normalStrength"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      normalStrengthAttr.Set(materialLayer.normalStrength);
 
-              {"ThinFilmEnable", p.thinFilmEnable},
-              {"AlphaIsThinFilmThickness", p.alphaIsThinFilmThickness},
-              {"ThinFilmThicknessConstant", p.thinFilmThicknessConstant},
+      auto emissiveIntensityAttr = material.CreateAttribute(
+      TfToken("emissiveIntensity"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      emissiveIntensityAttr.Set(materialLayer.emissiveIntensity);
 
-              {"AlphaTestReferenceValue", p.alphaTestReferenceValue},
-              {"SoftBlendFactor", p.softBlendFactor},
-              {"AlphaBias", p.alphaBias},
+      auto displacementFactorAttr = material.CreateAttribute(
+      TfToken("displacementFactor"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      displacementFactorAttr.Set(materialLayer.displacementFactor);
 
-              {"Features", p.features} };
-  }
+      auto alphaTestReferenceValueAttr = material.CreateAttribute(
+      TfToken("alphaTestReferenceValue"),
+      SdfValueTypeNames->Int,
+      true
+      );
+      alphaTestReferenceValueAttr.Set(materialLayer.alphaTestReferenceValue);
 
-  void from_json(const json& j, LegacyMaterialLayer& p) {
-    j.at("RoughnessBias").get_to(p.roughnessBias);
-    j.at("MetallicBias").get_to(p.metallicBias);
-    j.at("EmissiveIntensity").get_to(p.emissiveIntensity);
-    j.at("NormalStrenght").get_to(p.normalStrenght);
+      auto softBlendFactorAttr = material.CreateAttribute(
+      TfToken("softBlendFactor"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      softBlendFactorAttr.Set(materialLayer.softBlendFactor);
 
-    j.at("DisplacementFactor").get_to(p.displacementFactor);
+      auto alphaBiasAttr = material.CreateAttribute(
+      TfToken("alphaBias"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      alphaBiasAttr.Set(materialLayer.alphaBias);
 
-    j.at("SubsurfaceTransmittanceColor").get_to(p.subsurfaceTransmittanceColor);
-    j.at("SubsurfaceMeasurementDistance").get_to(p.subsurfaceMeasurementDistance);
-    j.at("SubsurfaceSingleScatteringAlbedo").get_to(p.subsurfaceSingleScatteringAlbedo);
-    j.at("SubsurfaceVolumetricAnisotropy").get_to(p.subsurfaceVolumetricAnisotropy);
-    j.at("IsSubsurfaceDiffusionProfile").get_to(p.isSubsurfaceDiffusionProfile);
-    j.at("SubsurfaceRadius").get_to(p.subsurfaceRadius);
-    j.at("SubsurfaceRadiusScale").get_to(p.subsurfaceRadiusScale);
-    j.at("SubsurfaceMaxSampleRadius").get_to(p.subsurfaceMaxSampleRadius);
-
-    j.at("ThinFilmEnable").get_to(p.thinFilmEnable);
-    j.at("AlphaIsThinFilmThickness").get_to(p.alphaIsThinFilmThickness);
-    j.at("ThinFilmThicknessConstant").get_to(p.thinFilmThicknessConstant);
-
-    j.at("AlphaTestReferenceValue").get_to(p.alphaTestReferenceValue);
-    j.at("SoftBlendFactor").get_to(p.softBlendFactor);
-    j.at("AlphaBias").get_to(p.alphaBias);
-
-    j.at("Features").get_to(p.features);
-  }
-
-  void to_json(json& j, const LegacyMeshLayer& p) {
-    j = json { { "MaterialLayer", p.materialLayer },
-              {"WorldPosOffset", p.offset} ,
-              {"OverrideMaterial", p.overrideMaterial},
-              {"Features", p.features}};
-  }
-
-  void from_json(const json& j, LegacyMeshLayer& p) {
-    j.at("MaterialLayer").get_to(p.materialLayer);
-    j.at("WorldPosOffset").get_to(p.offset);
-    j.at("OverrideMaterial").get_to(p.overrideMaterial);
-    j.at("Features").get_to(p.features);
-  }
-
-
-  void LegacyManager::load() { 
-    {
-      wchar_t file_prefix[MAX_PATH] = L"";
-      GetModuleFileNameW(nullptr, file_prefix, ARRAYSIZE(file_prefix));
-      std::filesystem::path dump_path = file_prefix;
-      dump_path = dump_path.parent_path();
-      dump_path /= "LegacyMaterialsLayer.json";
-
-      if (std::filesystem::exists(dump_path) == false)
-        return;
-      std::ifstream i;
-      i.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-      try {
-        i.open(dump_path.c_str());
-      }
-      catch (std::system_error& e) {
-        Logger::err(e.code().message());
-      }
-
-      if (!i.is_open()) {
-        return;
-      }
-      json j;
-      try {
-        j = json::parse(i);
-      }
-      catch (json::parse_error& ex) {
-        std::string error = str::format("load parse error at byte", ex.byte);
-        Logger::err(error.c_str());
-      }
-
-      m_legacyMaterialsLayer = j.get<std::unordered_map<uint32_t, LegacyMaterialLayer>>();
+      auto featuresAttr = material.CreateAttribute(
+      TfToken("features"),
+      SdfValueTypeNames->UInt,
+      true
+      );
+      featuresAttr.Set(static_cast<uint32_t>(materialLayer.features));
     }
-    {
-      wchar_t file_prefix[MAX_PATH] = L"";
-      GetModuleFileNameW(nullptr, file_prefix, ARRAYSIZE(file_prefix));
-      std::filesystem::path dump_path = file_prefix;
-      dump_path = dump_path.parent_path();
-      dump_path /= "LegacyMeshesLayer.json";
 
-      if (std::filesystem::exists(dump_path) == false)
-        return;
-      std::ifstream i;
-      i.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-      try {
-        i.open(dump_path.c_str());
-      }
-      catch (std::system_error& e) {
-        Logger::err(e.code().message());
-      }
+    void loadMaterialLayer(UsdStageRefPtr stage, LegacyMaterialLayer& materialLayer) {
+      UsdPrim material = stage->GetPrimAtPath(SdfPath("/MaterialLayer"));
 
-      if (!i.is_open()) {
-        return;
-      }
-      json j;
-      try {
-        j = json::parse(i);
-      }
-      catch (json::parse_error& ex) {
-        std::string error = str::format("load parse error at byte", ex.byte);
-        Logger::err(error.c_str());
-      }
+      auto roughnessBiasAttr = material.GetAttribute(TfToken("roughnessBias"));
+      roughnessBiasAttr.Get(&materialLayer.roughnessBias);
 
-      m_legacyMeshesLayer = j.get<std::unordered_map<XXH64_hash_t, LegacyMeshLayer>>();
+      auto metallicBiasAttr = material.GetAttribute(TfToken("metallicBias"));
+      metallicBiasAttr.Get(&materialLayer.metallicBias);
+
+      auto normalStrengthAttr = material.GetAttribute(TfToken("normalStrength"));
+      normalStrengthAttr.Get(&materialLayer.normalStrength);
+
+      auto emissiveIntensityAttr = material.GetAttribute(TfToken("emissiveIntensity"));
+      emissiveIntensityAttr.Get(&materialLayer.emissiveIntensity);
+
+      auto displacementFactorAttr = material.GetAttribute(TfToken("displacementFactor"));
+      displacementFactorAttr.Get(&materialLayer.displacementFactor);
+
+      auto alphaTestReferenceValueAttr = material.GetAttribute(TfToken("alphaTestReferenceValue"));
+      alphaTestReferenceValueAttr.Get(&materialLayer.alphaTestReferenceValue);
+
+      auto softBlendFactorAttr = material.GetAttribute(TfToken("softBlendFactor"));
+      softBlendFactorAttr.Get(&materialLayer.softBlendFactor);
+
+      auto alphaBiasAttr = material.GetAttribute(TfToken("alphaBias"));
+      alphaBiasAttr.Get(&materialLayer.alphaBias);
+
+      auto featuresAttr = material.GetAttribute(TfToken("features"));
+      uint32_t features = 0;
+      featuresAttr.Get(&features);
+      materialLayer.features = static_cast<LegacyMaterialFeature>(features);
     }
+  }
+
+
+  void LegacyManager::load() {     
+    wchar_t file_prefix[MAX_PATH] = L"";
+    GetModuleFileNameW(nullptr, file_prefix, ARRAYSIZE(file_prefix));
+    std::filesystem::path path = file_prefix;
+    path = path.parent_path();
+
+    std::vector<std::thread> threads;
+    std::mutex mtx;
+    std::vector<std::filesystem::path> materialsFile;
+    std::vector<std::filesystem::path> meshesFile;
+
+    uint32_t threadCount = std::thread::hardware_concurrency() / 2;
+
+    for (auto& entry : std::filesystem::directory_iterator(path / "MaterialsLayer")) {
+      materialsFile.push_back(entry.path());
+    }
+    for (auto& entry : std::filesystem::directory_iterator(path / "MeshesLayer")) {
+      meshesFile.push_back(entry.path());
+    }
+     
+
+    for (uint32_t threadId = 0; threadId < threadCount; ++threadId) {
+      threads.emplace_back([&,threadId] {
+        uint32_t perThreadFile = materialsFile.size() / threadCount;
+        for (uint32_t id = 0; id < perThreadFile; ++id) {
+          std::filesystem::path usdPath = materialsFile[id+ perThreadFile* threadId];
+          LegacyMaterialLayer legacyMaterial;
+          uint32_t hash = std::stoul(usdPath.filename().stem());
+
+          UsdStageRefPtr stage = UsdStage::Open(usdPath.u8string());
+
+          loadMaterialLayer(stage, legacyMaterial);
+          std::unique_lock<std::mutex> lock(mtx);
+          m_legacyMaterialsLayer.emplace(hash, std::move(legacyMaterial));
+        }
+      });
+    }
+
+    for (auto& t : threads)
+      t.join();
+
+    threads.clear();
+
+    for (uint32_t threadId = 0; threadId < threadCount; ++threadId) {
+      threads.emplace_back([&, threadId] {
+        uint32_t perThreadFile = meshesFile.size() / threadCount;
+        for (uint32_t id = 0; id < perThreadFile; ++id) {
+          std::filesystem::path usdPath = meshesFile[id + perThreadFile * threadId];
+          LegacyMeshLayer legacyMesh;
+          XXH64_hash_t hash = std::stoull(usdPath.filename().stem());
+
+          UsdStageRefPtr stage = UsdStage::Open(usdPath.u8string());
+          UsdPrim mesh = stage->GetPrimAtPath(SdfPath("/MeshLayer"));
+
+          UsdGeomXformable xformable(mesh);
+
+          bool resetsXformStack;
+          std::vector<UsdGeomXformOp> xformOps = xformable.GetOrderedXformOps(&resetsXformStack);
+
+          for (const auto& op : xformOps) {
+            if (op.GetOpType() == UsdGeomXformOp::TypeTranslate) {
+              GfVec3d translate;
+              op.Get(&translate);
+              legacyMesh.offset = Vector3(translate[0], translate[1], translate[2]);
+            }
+          }
+
+          auto featuresAttr = mesh.GetAttribute(TfToken("features"));
+          uint32_t features = 0;
+          featuresAttr.Get(&features);
+          legacyMesh.features = static_cast<LegacyMeshFeature>(features);
+
+          auto overrideMaterialsAttr = mesh.GetAttribute(TfToken("overrideMaterial"));
+          overrideMaterialsAttr.Get(&legacyMesh.overrideMaterial);
+
+          if (legacyMesh.overrideMaterial) {
+            loadMaterialLayer(stage, legacyMesh.materialLayer);
+          }
+          std::unique_lock<std::mutex> lock(mtx);
+          m_legacyMeshesLayer.emplace(hash, std::move(legacyMesh));
+        }
+        });
+    }
+
+    for (auto& t : threads)
+      t.join();
+
+
   }
 
   void LegacyManager::save() {
-    {
-      json j;
+    for (uint32_t hash : m_legacyMaterialsLayerModified) {
+      auto it = m_legacyMaterialsLayer.find(hash);
+      if (it != m_legacyMaterialsLayer.end()) {
+        const LegacyMaterialLayer& materialLayer = it->second;
+        wchar_t file_prefix[MAX_PATH] = L"";
+        GetModuleFileNameW(nullptr, file_prefix, ARRAYSIZE(file_prefix));
+        std::filesystem::path path = file_prefix;
+        path = path.parent_path();
+        std::filesystem::path usdPath = path / "MaterialsLayer" / std::string(std::to_string(hash) + ".usda");
 
-      wchar_t file_prefix[MAX_PATH] = L"";
-      GetModuleFileNameW(nullptr, file_prefix, ARRAYSIZE(file_prefix));
-      std::filesystem::path dump_path = file_prefix;
-      dump_path = dump_path.parent_path();
-      dump_path /= "LegacyMaterialsLayer.json";
+        UsdStageRefPtr stage = UsdStage::CreateNew(usdPath.u8string());
 
-      j = m_legacyMaterialsLayer;
+        saveMaterialLayer(stage, materialLayer);
 
-      std::ofstream o { dump_path.c_str() };
-      o << j;
+        stage->GetRootLayer()->Save();
+      }
     }
-    {
-      json jMesh;
+    m_legacyMaterialsLayerModified.clear();
+    for (XXH64_hash_t hash : m_legacyMeshesLayerModified) {
+      auto it = m_legacyMeshesLayer.find(hash);
+      if (it != m_legacyMeshesLayer.end()) {
+        const LegacyMeshLayer& meshLayer = it->second;
+        wchar_t file_prefix[MAX_PATH] = L"";
+        GetModuleFileNameW(nullptr, file_prefix, ARRAYSIZE(file_prefix));
+        std::filesystem::path path = file_prefix;
+        path = path.parent_path();
+        std::filesystem::path usdPath = path / "MeshesLayer" / std::string(std::to_string(hash) + ".usda");
 
-      wchar_t file_prefix[MAX_PATH] = L"";
-      GetModuleFileNameW(nullptr, file_prefix, ARRAYSIZE(file_prefix));
-      std::filesystem::path dump_path = file_prefix;
-      dump_path = dump_path.parent_path();
-      dump_path /= "LegacyMeshesLayer.json";
+        UsdStageRefPtr stage = UsdStage::CreateNew(usdPath.u8string());
 
-      jMesh = m_legacyMeshesLayer;
 
-      std::ofstream oMesh { dump_path.c_str() };
-      oMesh << jMesh;
+        UsdGeomMesh mesh = UsdGeomMesh::Define(stage, SdfPath { "/MeshLayer" });
+        mesh.AddTranslateOp().Set(GfVec3d(meshLayer.offset.x, meshLayer.offset.y, meshLayer.offset.z));
+
+        auto featuresAttr = mesh.GetPrim().CreateAttribute(
+        TfToken("features"),
+        SdfValueTypeNames->UInt,
+        true
+        );
+        featuresAttr.Set(static_cast<uint32_t>(meshLayer.features));
+
+        auto overrideMaterialAttr = mesh.GetPrim().CreateAttribute(
+        TfToken("overrideMaterial"),
+        SdfValueTypeNames->Bool,
+        true
+        );
+        overrideMaterialAttr.Set(meshLayer.overrideMaterial);
+
+        if (meshLayer.overrideMaterial) {
+          saveMaterialLayer(stage, meshLayer.materialLayer);
+        }
+
+        stage->GetRootLayer()->Save();
+      }
+
     }
+    m_legacyMeshesLayerModified.clear();
+
   }
 
   void LegacyManager::pushMeshMaterial(XXH64_hash_t meshHash) { 
@@ -473,18 +563,6 @@ namespace dxvk {
   }
 
   void LegacyManager::pushToLoad(uint32_t texturehash, D3D9CommonTexture* texture){
-
-    unsigned int nthreads = std::min(std::thread::hardware_concurrency(), TextureLoadThreadCount);
-
-    // TODO
-    /*size_t minThread = 0xFFffFFff;
-    uint32_t selectedThread = 0;
-    for (uint32_t threadID = 0; threadID < nthreads; ++threadID) {
-      if (minThread > m_textures[threadID].size()) {
-        minThread = m_textures[threadID].size();
-        selectedThread = threadID;
-      }
-    }*/
 
     std::optional<std::string> albedoPath;
     std::optional<std::string> normalPath;
@@ -584,7 +662,7 @@ namespace dxvk {
       material.features |= LegacyMaterialFeature::RejectDecal;
     }
     if (origin == TextureOrigin::Emmodel) {
-      material.normalStrenght = -1.0f;
+      material.normalStrength = -1.0f;
       material.features &= ~LegacyMaterialFeature::BackFaceCulling;
     }
 
@@ -726,6 +804,14 @@ namespace dxvk {
     } else {
       return nullptr;
     }
+  }
+
+  void LegacyManager::pushDirtyMaterialLayer(uint32_t _hash) {
+    m_legacyMaterialsLayerModified.emplace(_hash);
+  }
+
+  void LegacyManager::pushDirtyMeshLayer(XXH64_hash_t _hash) {
+    m_legacyMeshesLayerModified.emplace(_hash);
   }
 
   void LegacyMaterialLayer::resetLayerMaterial() {

@@ -1960,6 +1960,7 @@ namespace dxvk {
                 legacyManager.load();
               }
               auto drawMaterialOptions = [&](LegacyMaterialLayer* legacyMaterialLayer) {
+                bool dirty = false;
                 static LegacyMaterialLayer materiaLayerCopy;
                 if (ImGui::Button("Reset Layer")) {
                   legacyMaterialLayer->resetLayerMaterial();
@@ -1975,9 +1976,9 @@ namespace dxvk {
 
                 if (ImGui::TreeNode("Features support")) {
 
-                  auto drawFeature = [&legacyMaterialLayer](const char* str, LegacyMaterialFeature feature) {
+                  auto drawFeature = [&dirty, &legacyMaterialLayer](const char* str, LegacyMaterialFeature feature) {
                     bool featureState = legacyMaterialLayer->testFeatures(feature);
-                    ImGui::Checkbox(str, &featureState);
+                    dirty |= ImGui::Checkbox(str, &featureState);
                     if (featureState) {
                       legacyMaterialLayer->features |= feature;
                     } 
@@ -2007,40 +2008,31 @@ namespace dxvk {
                 }
 
 
-                ImGui::SliderInt("Alpha test reference value", &legacyMaterialLayer->alphaTestReferenceValue, 0, 255, "%d", ImGuiSliderFlags_AlwaysClamp);
+                dirty |= ImGui::SliderInt("Alpha test reference value", &legacyMaterialLayer->alphaTestReferenceValue, 0, 255, "%d", ImGuiSliderFlags_AlwaysClamp);
 
-                ImGui::SliderFloat("Metallic Bias", &legacyMaterialLayer->metallicBias, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                ImGui::SliderFloat("Roughness Bias", &legacyMaterialLayer->roughnessBias, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                dirty |= ImGui::SliderFloat("Metallic Bias", &legacyMaterialLayer->metallicBias, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                dirty |= ImGui::SliderFloat("Roughness Bias", &legacyMaterialLayer->roughnessBias, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 
-                ImGui::SliderFloat("Emissive Intensity", &legacyMaterialLayer->emissiveIntensity, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                dirty |= ImGui::SliderFloat("Emissive Intensity", &legacyMaterialLayer->emissiveIntensity, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 
-                ImGui::SliderFloat("Normal Strength", &legacyMaterialLayer->normalStrenght, -10.0f, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                ImGui::SliderFloat("Soft blend factor", &legacyMaterialLayer->softBlendFactor, 0.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                ImGui::SliderFloat("Alpha bias", &legacyMaterialLayer->alphaBias, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                dirty |= ImGui::SliderFloat("Normal Strength", &legacyMaterialLayer->normalStrength, -10.0f, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                dirty |= ImGui::SliderFloat("Soft blend factor", &legacyMaterialLayer->softBlendFactor, 0.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                dirty |= ImGui::SliderFloat("Alpha bias", &legacyMaterialLayer->alphaBias, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 
                 if (ImGui::TreeNode("Displacement params")) {
-                  ImGui::SliderFloat("Displacement factor", &legacyMaterialLayer->displacementFactor, -10.0f, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                  dirty |= ImGui::SliderFloat("Displacement factor", &legacyMaterialLayer->displacementFactor, -10.0f, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                  dirty |= ImGui::SliderFloat("Displacement Noise", &legacyMaterialLayer->displacementNoise, 0.0f, 1.f, "%.03f", ImGuiSliderFlags_AlwaysClamp);
                   ImGui::TreePop();
                 }
 
-                if (ImGui::TreeNode("Subsurface params")) {
-                  ImGui::Checkbox("Subsurface diffusion profile", &legacyMaterialLayer->isSubsurfaceDiffusionProfile);
-                  ImGui::SliderFloat("Subsurface Measurement Distance", &legacyMaterialLayer->subsurfaceMeasurementDistance, 0.0f, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                  ImGui::SliderFloat3("Subsurface Transmitance Color", legacyMaterialLayer->subsurfaceTransmittanceColor.data, 0.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                  ImGui::SliderFloat("Subsurface Volumetric Anisotropy", &legacyMaterialLayer->subsurfaceVolumetricAnisotropy, 0.0f, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                  ImGui::SliderFloat3("Subsurface Scattering Albedo", legacyMaterialLayer->subsurfaceSingleScatteringAlbedo.data, 0.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                  ImGui::SliderFloat3("Subsurface Scattering Radius", legacyMaterialLayer->subsurfaceRadius.data, 0.0f, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                  ImGui::SliderFloat("Subsurface Max Sample Radius", &legacyMaterialLayer->subsurfaceMaxSampleRadius, 0.0f, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                  ImGui::TreePop();
-                }
-                if (ImGui::TreeNode("Thin film params")) {
-                  ImGui::Checkbox("Thin film", &legacyMaterialLayer->thinFilmEnable);
-                  ImGui::Checkbox("Alpha is thin film", &legacyMaterialLayer->alphaIsThinFilmThickness);
-                  ImGui::SliderFloat("Thin film thickness constant", &legacyMaterialLayer->thinFilmThicknessConstant, 0.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                  ImGui::TreePop();
+                if (dirty) {
+                  DxvkDevice* device = sceneMgr.device();
+                  LegacyManager& legacyManager = device->getLegacyManager();
+                  legacyManager.pushDirtyMaterialLayer(pair->second.originalHash);
                 }
               };
 
+        
               if (ImGui::TreeNode("Legacy Material Layer")) {
                 LegacyMaterialLayer* legacyMaterialLayer = pair->second.legacyMaterialLayer;
                 if (legacyMaterialLayer) {
@@ -2055,10 +2047,11 @@ namespace dxvk {
                 LegacyMeshLayer* legacyMeshLayer = legacyManager.getLegacyMeshLayer(meshHash);
 
                 if (legacyMeshLayer){
-
+                  bool dirty = false;
                   bool overrideMaterial = legacyMeshLayer->overrideMaterial;
 
                   if (ImGui::Checkbox("Override material", &legacyMeshLayer->overrideMaterial)) {
+                    dirty = true;
                     legacyMeshLayer->materialLayer = *pair->second.legacyMaterialLayer;
                   }
                   if (legacyMeshLayer->overrideMaterial) {
@@ -2066,11 +2059,11 @@ namespace dxvk {
                     drawMaterialOptions(legacyMaterialLayer);
                   }
 
-                  ImGui::SliderFloat3("World position offset", legacyMeshLayer->offset.data, -40.0f, 40.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                  dirty |= ImGui::SliderFloat3("World position offset", legacyMeshLayer->offset.data, -4000.0f, 4000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 
-                  auto drawFeature = [&legacyMeshLayer](const char* str, LegacyMeshFeature feature) {
+                  auto drawFeature = [&dirty, &legacyMeshLayer](const char* str, LegacyMeshFeature feature) {
                     bool featureState = legacyMeshLayer->testFeatures(feature);
-                    ImGui::Checkbox(str, &featureState);
+                    dirty |= ImGui::Checkbox(str, &featureState);
                     if (featureState) {
                       legacyMeshLayer->features |= feature;
                     } else {
@@ -2084,6 +2077,11 @@ namespace dxvk {
                     drawFeature("HideMesh", LegacyMeshFeature::HideMesh);
                     drawFeature("NormalizeVertexColor", LegacyMeshFeature::NormalizeVertexColor);
                     ImGui::TreePop();
+                  }
+                  if (dirty) {
+                    DxvkDevice* device = sceneMgr.device();
+                    LegacyManager& legacyManager = device->getLegacyManager();
+                    legacyManager.pushDirtyMeshLayer(meshHash);
                   }
                 }
                 ImGui::TreePop();

@@ -1,10 +1,15 @@
 #include "d3d9_shaders_hasher.h"
 #include "../util/log/log.h"
 #include "../util/util_string.h"
-#include <json/json.hpp>
 #include <filesystem>
 
-using json = nlohmann::json;
+#include "../../lssusd/usd_include_begin.h"
+#include <pxr/usd/usd/stage.h>
+#include <pxr/usd/usd/attribute.h>
+#include <pxr/usd/usd/primRange.h>
+#include "../../lssusd/usd_include_end.h"
+
+using namespace pxr;
 
 namespace dxvk {
 
@@ -276,77 +281,113 @@ namespace dxvk {
 
   static constexpr char* ShaderTypeStr[(uint32_t) ShaderType::Count] { "VertexShaders", "PixelShaders" };
 
-  void to_json(json& j, const ShaderDesc& p) {
-    j = json { {"Activate", p.activated}, {"ShaderFlags", p.flags} , {"ConstantVs", p.constantVs}, {"ConstantPs", p.constantPs} };
-  }
-
-  void from_json(const json& j, ShaderDesc& p) {
-    j.at("Activate").get_to(p.activated);
-    j.at("ShaderFlags").get_to(p.flags);
-    j.at("ConstantVs").get_to(p.constantVs);
-    j.at("ConstantPs").get_to(p.constantPs);
-  }
-
   void ShadersHasher::loadProfil() {
+
     wchar_t file_prefix[MAX_PATH] = L"";
     GetModuleFileNameW(nullptr, file_prefix, ARRAYSIZE(file_prefix));
     std::filesystem::path dump_path = file_prefix;
     dump_path = dump_path.parent_path();
-    dump_path /= "ShaderProfil.json";
 
-    if (std::filesystem::exists(dump_path) == false)
-      return;
-    std::ifstream i;
-    i.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-    try {
-      i.open(dump_path.c_str());
-    }
-    catch (std::system_error& e) {
-      Logger::err(e.code().message());
+    std::filesystem::path usdPath = dump_path / "shaderProfil.usda";
+    if (std::filesystem::exists(usdPath)) {
+      UsdStageRefPtr stage = UsdStage::Open(usdPath.u8string());
+      for (uint32_t i = 0; i < (uint32_t) ShaderType::Count; ++i) {
+        UsdPrim shaderContainer = stage->GetPrimAtPath(SdfPath(std::string("/" + std::string(ShaderTypeStr[i]))));
+
+        for (const UsdPrim& shader : UsdPrimRange(shaderContainer)) {
+          uint32_t hash;
+          ShaderDesc shaderDesc;
+          auto shaderHashAttr = shader.GetAttribute(TfToken("shaderHash"));
+          shaderHashAttr.Get(&hash);
+
+          auto activateAttr = shader.GetAttribute(TfToken("activate"));
+          activateAttr.Get(&shaderDesc.activated);
+
+          auto shaderFlagsAttr = shader.GetAttribute(TfToken("shaderFlags"));
+          uint32_t flags;
+          shaderFlagsAttr.Get(&flags);
+          shaderDesc.flags = static_cast<ShaderFlags>(flags);
+
+          VtArray<uint32_t> cVS;
+          auto constantVsAttr = shader.GetAttribute(TfToken("constantVs"));
+          constantVsAttr.Get(&cVS);
+          shaderDesc.constantVs = std::unordered_set<uint32_t>(cVS.begin(), cVS.end());
+
+          VtArray<uint32_t> cPS;
+          auto constantPsAttr = shader.GetAttribute(TfToken("constantPs"));
+          constantPsAttr.Get(&cPS);
+          shaderDesc.constantPs = std::unordered_set<uint32_t>(cPS.begin(), cPS.end());
+
+          m_shaders[i].try_emplace(hash, std::move(shaderDesc));
+        }
+
+      }
     }
 
-    if (!i.is_open()) {
-      return;
-    }
-    json j;
-    try {
-      j = json::parse(i);
-    }
-    catch (json::parse_error& ex) {
-      std::string error = str::format("load parse error at byte", ex.byte);
-      Logger::err(error.c_str());
-    }
-    for (uint32_t i = 0; i < (uint32_t) ShaderType::Count; ++i) {
-      m_shaders[i] = j[ShaderTypeStr[i]].get<ShadersHashList>();
 #ifdef REMIX_DEVELOPMENT
+    for (uint32_t i = 0; i < (uint32_t) ShaderType::Count; ++i) {
       for (auto& [hash, desc] : m_shaders[i]) {
         parseShaderAsm(hash, desc, (ShaderType) i);
       }
-#endif
     }
+#endif
 
   }
 
   void ShadersHasher::saveProfil() {
 
-    json j;
-    auto saveShaders = [&j](const char* _shaderType, ShadersHashList& _list) {
-      j[_shaderType] = _list;
-      };
-
-
     wchar_t file_prefix[MAX_PATH] = L"";
     GetModuleFileNameW(nullptr, file_prefix, ARRAYSIZE(file_prefix));
     std::filesystem::path dump_path = file_prefix;
     dump_path = dump_path.parent_path();
-    dump_path /= "ShaderProfil.json";
+
+    std::filesystem::path usdPath = dump_path / "shaderProfil.usda";
+
+    UsdStageRefPtr stage = UsdStage::CreateNew(usdPath.u8string());
 
     for (uint32_t i = 0; i < (uint32_t) ShaderType::Count; ++i) {
-      saveShaders(ShaderTypeStr[i], m_shaders[i]);
-    }
+      UsdPrim shaderContainer = stage->DefinePrim(SdfPath { std::string("/" + std::string(ShaderTypeStr[i])) });
+      uint32_t shaderIndex = 0;
+      for (auto& [id, shaderDesc] : m_shaders[i]) {
 
-    std::ofstream o { dump_path.c_str() };
-    o << j;
+        UsdPrim shader = stage->DefinePrim(SdfPath { std::string("/" + std::string(ShaderTypeStr[i]) + "/Shader_" + std::to_string(shaderIndex)) });
+
+        auto shaderHashAttr = shader.CreateAttribute(
+        TfToken("shaderHash"),
+        SdfValueTypeNames->UInt,
+        true
+        );
+        shaderHashAttr.Set(id);
+
+        auto activateAttr = shader.CreateAttribute(
+        TfToken("activate"),
+        SdfValueTypeNames->Bool,
+        true
+        );
+        activateAttr.Set(shaderDesc.activated);
+
+        auto shaderFlagsAttr = shader.CreateAttribute(
+        TfToken("shaderFlags"),
+        SdfValueTypeNames->UInt,
+        true
+        );
+        shaderFlagsAttr.Set(static_cast<uint32_t>(shaderDesc.flags));
+
+        auto constantVSAttr = shader.CreateAttribute(
+        TfToken("constantVs"),
+        SdfValueTypeNames->UIntArray
+        );
+        constantVSAttr.Set(VtArray<uint32_t>(shaderDesc.constantVs.begin(), shaderDesc.constantVs.end()));
+
+        auto constantPsAttr = shader.CreateAttribute(
+        TfToken("constantPs"),
+        SdfValueTypeNames->UIntArray
+        );
+        constantPsAttr.Set(VtArray<uint32_t>(shaderDesc.constantPs.begin(), shaderDesc.constantPs.end()));
+        ++shaderIndex;
+      }
+    }
+    stage->GetRootLayer()->Save();
   }
 
   bool ShadersHasher::isShaderBindedHasFlag(ShaderFlags flags) {

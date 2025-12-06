@@ -1,12 +1,22 @@
 #include "rtx_area_manager.h"
 #include <array>
-#include "../../util/util_json.h"
+
+
+#include "../../lssusd/usd_include_begin.h"
+#include <pxr/usd/usd/stage.h>
+#include <pxr/usd/usdLux/sphereLight.h>
+#include <pxr/usd/usdLux/rectLight.h>
+#include <pxr/usd/usdLux/distantLight.h>
+#include <pxr/usd/usd/primRange.h>
+#include "../../lssusd/usd_include_end.h"
+
+using namespace pxr;
 
 namespace dxvk {
 
     void AreaManager::setArea(uint32_t area)
     {
-      if (m_currentArea != area)
+      if (m_currentArea != area && ( area != 200 || m_currentArea != 500))
       {
         m_currentRoughnessFactor = 0.0f;
         m_lightFactor = 1.0f;
@@ -20,8 +30,21 @@ namespace dxvk {
       }
     }
 
-    void AreaManager::update() {
+    void AreaManager::update() { 
+    }
 
+    void AreaManager::setDay() {
+      std::unordered_map<uint32_t, uint32_t> nightToDay
+      {
+        {200, 500 },
+        {173, 501 },
+        {174, 501 },
+        {175, 501 },
+        {256, 502 }
+      };
+      auto it = nightToDay.find(getCurrentAreaID());
+      if(it != nightToDay.end())
+        setArea(it->second);
     }
 
     uint32_t AreaManager::getCurrentAreaID(){
@@ -36,129 +59,229 @@ namespace dxvk {
       return m_areas[m_currentArea];
     }
 
-    void to_json(json& j, const AreaLightDataDir& p) {
-      j = json {{"LightRadiance", p.lightRadiance },
-                 {"LightDirection", p.lightDirection},};
-    }
-    void from_json(const json& j, AreaLightDataDir& p) {
-      j.at("LightRadiance").get_to(p.lightRadiance);
-      j.at("LightDirection").get_to(p.lightDirection);
-    }
-
-    void to_json(json& j, const AreaLightDataPoint& p) {
-      j = json { {"LightRadiance", p.lightRadiance },
-                 {"LightPosition", p.lightPosition },
-                 {"LightRadius", p.lightRadius}, };
-    }
-    void from_json(const json& j, AreaLightDataPoint& p) {
-      j.at("LightRadiance").get_to(p.lightRadiance);
-      j.at("LightPosition").get_to(p.lightPosition);
-      j.at("LightRadius").get_to(p.lightRadius);
-    }
-
-    void to_json(json& j, const AreaLightDataRect& p) {
-      j = json { {"LightRadiance", p.lightRadiance },
-                 {"LightPosition", p.lightPosition },
-                 {"LightRotation", p.rotation},
-                 {"LightDimensions", p.dimensions}, };
-    }
-    void from_json(const json& j, AreaLightDataRect& p) {
-      j.at("LightRadiance").get_to(p.lightRadiance);
-      j.at("LightPosition").get_to(p.lightPosition);
-      j.at("LightRotation").get_to(p.rotation);
-      j.at("LightDimensions").get_to(p.dimensions);
-    }
-
-
-    void to_json(json& j, const AreaData& p) {
-      j = json {
-                {"DirLightsData", p.dirLightsData},
-                {"PointLightsData", p.pointLightsData},
-                {"RectLightsData", p.rectLightsData},
-                {"SkyBrightness", p.skyBrightness},
-                {"TransmittanceColor", p.transmittanceColor},
-                {"SingleScatteringAlbedo", p.singleScatteringAlbedo},
-                {"TransmittanceMeasurementDistanceMeters", p.transmittanceMeasurementDistanceMeters},
-                {"Anisotropy", p.anisotropy},
-                {"EnableHeterogeneousFog", p.enableHeterogeneousFog},
-                {"NoiseFieldSpatialFrequency", p.noiseFieldSpatialFrequency},
-                {"NoiseFieldOctaves", p.noiseFieldOctaves},
-                {"NoiseFieldDensityScale", p.noiseFieldDensityScale}};
-    }
-
-    void from_json(const json& j, AreaData& p) {
-      //j.at("LightRadiance").get_to(p.lightRadiance);
-      //j.at("LightDirection").get_to(p.lightDirection);
-
-      //p.dirLightsData.push_back(AreaLightDataDir { p.lightRadiance, p.lightDirection });
-
-      j.at("DirLightsData").get_to(p.dirLightsData);
-      j.at("PointLightsData").get_to(p.pointLightsData);
-      j.at("RectLightsData").get_to(p.rectLightsData);
-      for (AreaLightDataRect& light : p.rectLightsData) {
-        light.buildMatrix();
-      }
-      j.at("SkyBrightness").get_to(p.skyBrightness);
-      j.at("TransmittanceColor").get_to(p.transmittanceColor);
-      j.at("SingleScatteringAlbedo").get_to(p.singleScatteringAlbedo);
-      j.at("TransmittanceMeasurementDistanceMeters").get_to(p.transmittanceMeasurementDistanceMeters);
-      j.at("Anisotropy").get_to(p.anisotropy);
-      j.at("EnableHeterogeneousFog").get_to(p.enableHeterogeneousFog);
-      j.at("NoiseFieldSpatialFrequency").get_to(p.noiseFieldSpatialFrequency);
-      j.at("NoiseFieldOctaves").get_to(p.noiseFieldOctaves);
-      j.at("NoiseFieldDensityScale").get_to(p.noiseFieldDensityScale);
-
-    }
-
     void AreaManager::load() {
-      {
         wchar_t file_prefix[MAX_PATH] = L"";
         GetModuleFileNameW(nullptr, file_prefix, ARRAYSIZE(file_prefix));
-        std::filesystem::path dump_path = file_prefix;
-        dump_path = dump_path.parent_path();
-        dump_path /= "Areas.json";
+        std::filesystem::path path = file_prefix;
+        path = path.parent_path();
 
-        if (std::filesystem::exists(dump_path) == false)
-          return;
-        std::ifstream i;
-        i.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-        try {
-          i.open(dump_path.c_str());
-        }
-        catch (std::system_error& e) {
-          Logger::err(e.code().message());
-        }
+        for (uint32_t areaId = 0; areaId <= 502; ++areaId){
+          std::filesystem::path usdPath = path / "Area" / std::string(std::to_string(areaId) + ".usda");
 
-        if (!i.is_open()) {
-          return;
-        }
-        json j;
-        try {
-          j = json::parse(i);
-        }
-        catch (json::parse_error& ex) {
-          std::string error = str::format("load parse error at byte", ex.byte);
-          Logger::err(error.c_str());
-        }
+          if (std::filesystem::exists(usdPath)){
+            AreaData area;
+            UsdStageRefPtr stage = UsdStage::Open(usdPath.u8string());
 
-        m_areas = j.get<std::unordered_map<uint32_t, AreaData>>();
-      }
+            {
+              UsdPrim generic = stage->GetPrimAtPath(SdfPath("/Generic"));
+
+              auto skyBrightnessAttr = generic.GetAttribute(TfToken("skyBrightness"));
+              skyBrightnessAttr.Get(&area.skyBrightness);
+            }
+
+            {
+              UsdPrim volumetric = stage->GetPrimAtPath(SdfPath("/Volumetric"));
+
+              auto transmittanceColorAttr = volumetric.GetAttribute(TfToken("transmittanceColor"));
+              GfVec3f transmittanceColor;
+              transmittanceColorAttr.Get(&transmittanceColor);
+              area.transmittanceColor = Vector3(transmittanceColor[0], transmittanceColor[1], transmittanceColor[2]);
+
+              auto singleScatteringAlbedoAttr = volumetric.GetAttribute(TfToken("singleScatteringAlbedo"));
+              GfVec3f singleScatteringAlbedo;
+              singleScatteringAlbedoAttr.Get(&singleScatteringAlbedo);
+              area.singleScatteringAlbedo = Vector3(singleScatteringAlbedo[0], singleScatteringAlbedo[1], singleScatteringAlbedo[2]);
+
+              auto transmittanceMeasurementDistanceMetersAttr = volumetric.GetAttribute(TfToken("transmittanceMeasurementDistanceMeters"));
+              transmittanceMeasurementDistanceMetersAttr.Get(&area.transmittanceMeasurementDistanceMeters);
+            }
+            {
+              UsdPrim prism = stage->GetPrimAtPath(SdfPath("/DistantLights"));
+   
+              for (const UsdPrim& light : UsdPrimRange(prism)) {
+                AreaLightDataDir dirLight;
+                auto colorAttr = light.GetAttribute(TfToken("inputs:color"));
+                GfVec3f color;
+                colorAttr.Get(&color);
+                dirLight.lightRadiance = Vector3(color[0], color[1], color[2]);
+
+                auto directionAttr = light.GetAttribute(TfToken("direction"));
+                GfVec3f lightDirection;
+                directionAttr.Get(&lightDirection);
+                dirLight.lightDirection = Vector3(lightDirection[0], lightDirection[1], lightDirection[2]);
+
+                area.dirLightsData.emplace_back(std::move(dirLight));
+              }
+            }
+
+            {
+              UsdPrim prism = stage->GetPrimAtPath(SdfPath("/SphereLights"));
+
+              for (const UsdPrim& light : UsdPrimRange(prism)) {
+                AreaLightDataPoint pointLight;
+                auto colorAttr = light.GetAttribute(TfToken("inputs:color"));
+                GfVec3f color;
+                colorAttr.Get(&color);
+                pointLight.lightRadiance = Vector3(color[0], color[1], color[2]);
+
+                auto radiusAttr = light.GetAttribute(TfToken("inputs:radius"));
+                radiusAttr.Get(&pointLight.lightRadius);
+
+                UsdGeomXformable xformable(light);
+
+                bool resetsXformStack;
+                std::vector<UsdGeomXformOp> xformOps = xformable.GetOrderedXformOps(&resetsXformStack);
+
+                for (const auto& op : xformOps) {
+                  if (op.GetOpType() == UsdGeomXformOp::TypeTranslate) {
+                    GfVec3d translate;
+                    op.Get(&translate);
+                    pointLight.lightPosition = Vector3(translate[0], translate[1], translate[2]);
+                  }
+                }
+                area.pointLightsData.emplace_back(std::move(pointLight));
+              }
+            }
+
+            {
+              UsdPrim prism = stage->GetPrimAtPath(SdfPath("/RectLights"));
+
+              for (const UsdPrim& light : UsdPrimRange(prism)) {
+                AreaLightDataRect rectLight;
+                auto colorAttr = light.GetAttribute(TfToken("inputs:color"));
+                GfVec3f color;
+                colorAttr.Get(&color);
+                rectLight.lightRadiance = Vector3(color[0], color[1], color[2]);
+
+                auto widthAttr = light.GetAttribute(TfToken("inputs:width"));
+                widthAttr.Get(&rectLight.dimensions.x);
+
+                auto heightAttr = light.GetAttribute(TfToken("inputs:height"));
+                heightAttr.Get(&rectLight.dimensions.y);
+
+                UsdGeomXformable xformable(light);
+
+                bool resetsXformStack;
+                std::vector<UsdGeomXformOp> xformOps = xformable.GetOrderedXformOps(&resetsXformStack);
+
+                for (const auto& op : xformOps) {
+                  if (op.GetOpType() == UsdGeomXformOp::TypeTranslate) {
+                    GfVec3d translate;
+                    op.Get(&translate);
+                    rectLight.lightPosition = Vector3(translate[0], translate[1], translate[2]);
+                  }
+
+                  if (op.GetOpType() == UsdGeomXformOp::TypeRotateXYZ) {
+                    GfVec3f rotate;
+                    op.Get(&rotate);
+                    rectLight.rotation = Vector3(rotate[0], rotate[1], rotate[2]);
+                  }
+                }
+
+                area.rectLightsData.emplace_back(std::move(rectLight));
+              }
+            }
+
+            m_areas.try_emplace(areaId, area);
+          }
+        }
     }
 
     void AreaManager::save() {
+
+
+      wchar_t file_prefix[MAX_PATH] = L"";
+      GetModuleFileNameW(nullptr, file_prefix, ARRAYSIZE(file_prefix));
+      std::filesystem::path path = file_prefix;
+      path = path.parent_path();
+
+      // USD
+      for(auto& [id, area] : m_areas)
       {
-        json j;
+        std::filesystem::path usdPath = path / "Area" / std::string(std::to_string(id) + ".usda");
 
-        wchar_t file_prefix[MAX_PATH] = L"";
-        GetModuleFileNameW(nullptr, file_prefix, ARRAYSIZE(file_prefix));
-        std::filesystem::path dump_path = file_prefix;
-        dump_path = dump_path.parent_path();
-        dump_path /= "Areas.json";
+        UsdStageRefPtr stage = UsdStage::CreateNew(usdPath.u8string());
 
-        j = m_areas;
+        {
+          UsdPrim generic = stage->DefinePrim(SdfPath { "/Generic" });
+          auto skyBrightnessAttr = generic.CreateAttribute(
+          TfToken("skyBrightness"),
+          SdfValueTypeNames->Float,
+          true
+          );
+          skyBrightnessAttr.Set(area.skyBrightness);
 
-        std::ofstream o { dump_path.c_str() };
-        o << j;
+        }
+
+        {
+          UsdPrim volumetric = stage->DefinePrim(SdfPath { "/Volumetric" });
+          auto transmittanceColorAttr = volumetric.CreateAttribute(
+          TfToken("transmittanceColor"),
+          SdfValueTypeNames->Color3f,
+          true
+          );
+          transmittanceColorAttr.Set(GfVec3f(area.transmittanceColor.x, area.transmittanceColor.y, area.transmittanceColor.z));
+
+          auto singleScatteringAlbedoAttr = volumetric.CreateAttribute(
+          TfToken("singleScatteringAlbedo"),
+          SdfValueTypeNames->Color3f,
+          true
+          );
+          singleScatteringAlbedoAttr.Set(GfVec3f(area.singleScatteringAlbedo.x, area.singleScatteringAlbedo.y, area.singleScatteringAlbedo.z));
+
+          auto transmittanceMeasurementDistanceMetersAttr = volumetric.CreateAttribute(
+          TfToken("transmittanceMeasurementDistanceMeters"),
+          SdfValueTypeNames->Float,
+          true
+          );
+          transmittanceMeasurementDistanceMetersAttr.Set(area.transmittanceMeasurementDistanceMeters);
+
+        }
+
+        {
+          UsdPrim light = stage->DefinePrim(SdfPath { "/DistantLights" });
+          uint32_t dirLightIndex = 0;
+          for (auto& lightDir : area.dirLightsData) {
+            UsdLuxDistantLight light = UsdLuxDistantLight::Define(stage, SdfPath { std::string("/DistantLights/DistantLight_" + std::to_string(dirLightIndex)) });
+            light.CreateColorAttr().Set(GfVec3f(lightDir.lightRadiance.x, lightDir.lightRadiance.y, lightDir.lightRadiance.z));
+
+            auto dirAttr = light.GetPrim().CreateAttribute(
+              TfToken("direction"),
+              SdfValueTypeNames->Vector3f,
+              true
+            );
+
+            dirAttr.Set(GfVec3f(lightDir.lightDirection.x, lightDir.lightDirection.y, lightDir.lightDirection.z));
+            ++dirLightIndex;
+          }
+        }
+
+        {
+          UsdPrim light = stage->DefinePrim(SdfPath { "/SphereLights" });
+          uint32_t pointLightIndex = 0;
+          for (auto& pointLight : area.pointLightsData) {
+            UsdLuxSphereLight light = UsdLuxSphereLight::Define(stage, SdfPath { std::string("/SphereLights/SphereLight_" + std::to_string(pointLightIndex)) });
+            light.CreateColorAttr().Set(GfVec3f(pointLight.lightRadiance.x, pointLight.lightRadiance.y, pointLight.lightRadiance.z));
+            light.CreateRadiusAttr().Set(pointLight.lightRadius);
+            light.AddTranslateOp().Set(GfVec3d(pointLight.lightPosition.x, pointLight.lightPosition.y, pointLight.lightPosition.z));
+            ++pointLightIndex;
+          }
+        }
+        {
+          UsdPrim light = stage->DefinePrim(SdfPath { "/RectLights" });
+          uint32_t rectLightIndex = 0;
+          for (auto& rectLight : area.rectLightsData) {
+            UsdLuxRectLight  light = UsdLuxRectLight::Define(stage, SdfPath { std::string("/RectLights/RectLight_" + std::to_string(rectLightIndex)) });
+            light.CreateColorAttr().Set(GfVec3f(rectLight.lightRadiance.x, rectLight.lightRadiance.y, rectLight.lightRadiance.z));
+            light.CreateWidthAttr().Set(rectLight.dimensions.x);
+            light.CreateHeightAttr().Set(rectLight.dimensions.y);
+            light.AddTranslateOp().Set(GfVec3d(rectLight.lightPosition.x, rectLight.lightPosition.y, rectLight.lightPosition.z));
+            light.AddRotateXYZOp().Set(GfVec3f(rectLight.rotation.x, rectLight.rotation.y, rectLight.rotation.z));
+            ++rectLightIndex;
+          }
+        }
+
+        stage->GetRootLayer()->Save();
       }
     }
 

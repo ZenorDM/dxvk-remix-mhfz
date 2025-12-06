@@ -1136,8 +1136,23 @@ namespace dxvk {
       if (legacyMeshLayer && legacyMeshLayer->overrideMaterial) {
         legacyMaterialLayer = &legacyMeshLayer->materialLayer;
       }
-      if (legacyMaterialLayer && legacyMaterialLayer->alphaTestReferenceValue > 0) {
-        m_activeDrawCallState.materialData.alphaTestReferenceValue = legacyMaterialLayer->alphaTestReferenceValue;
+
+      if (pTexInfo) {
+        uint32_t oriHash = m_parent->GetLegacyManager().getTextureHash(pTexInfo);
+        if (oriHash == 0x7917615c || oriHash == 0xf5a533ff || oriHash == 0xd6776d16 ||
+        oriHash == 0xbfa0576d ||
+        oriHash == 0x6722e09d ||
+        oriHash == 0xb231d7ff ||
+        oriHash == 0x1d7ff003) {
+          AreaManager& areaManager = m_parent->GetAreaManager();
+          areaManager.setDay();
+        }
+      }
+      if (legacyMaterialLayer){ 
+    
+        if (legacyMaterialLayer->alphaTestReferenceValue > 0) {
+          m_activeDrawCallState.materialData.alphaTestReferenceValue = legacyMaterialLayer->alphaTestReferenceValue;
+        }
       }
       // MHF end
       if (legacyTextures.managedAlbedoTexture != nullptr) {
