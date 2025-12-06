@@ -757,15 +757,15 @@ namespace dxvk {
           }
         }
         RtInstance* pInstance = processDrawCallState(ctx, newDrawCallState, overrideMaterialData);
-
+        const RtxParticleSystemDesc* pParticleSystemDesc = replacement.particleSystem.has_value() ? &replacement.particleSystem.value() : nullptr;
         const bool isParticleSystem = replacement.particleSystem.has_value();
 
         if (pInstance && isParticleSystem) {
-          // We dont draw the mesh emitters for particle systems
-          pInstance->setHidden(true);
-
           RtxParticleSystemManager& particleSystem = device()->getCommon()->metaParticleSystem();
           particleSystem.spawnParticles(ctx.ptr(), replacement.particleSystem.value(), pInstance->getVectorIdx(), newDrawCallState, overrideMaterialData);
+          if (pParticleSystemDesc->hideEmitter) {
+            pInstance->setHidden(true);
+          }
         } else if (pRootInstance == nullptr) {
           pRootInstance = pInstance;
         }
