@@ -6,7 +6,7 @@
 #include "rtx_types.h"
 namespace dxvk {
 
-
+  struct LightManager;
   struct AreaLightDataDir {
     Vector3 lightRadiance = Vector3(1.6f, 1.8f, 2.0f);
     Vector3 lightDirection = Vector3(-0.2f, -1.0f, 0.4f);
@@ -29,10 +29,10 @@ namespace dxvk {
     void buildMatrix();
   };
 
+  class AreaManager;
+
   struct AreaData {
     // light values
-    Vector3 lightRadiance = Vector3(1.6f, 1.8f, 2.0f);
-    Vector3 lightDirection = Vector3(-0.2f, -1.0f, 0.4f);
     std::vector<AreaLightDataDir > dirLightsData;
     std::vector<AreaLightDataPoint > pointLightsData;
     std::vector<AreaLightDataRect > rectLightsData;
@@ -49,7 +49,7 @@ namespace dxvk {
     float noiseFieldDensityScale = 1.0f;
     float skyBrightness = 1.0f;
     bool lightDirty = true;
-
+    void showImguiSettings(const AreaManager& areaManager, const Vector3& cameraPosition, LightManager& lightManager);
   };
 
   class AreaManager {

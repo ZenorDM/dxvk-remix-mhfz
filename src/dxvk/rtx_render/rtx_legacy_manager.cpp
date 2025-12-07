@@ -818,4 +818,111 @@ namespace dxvk {
     *this = defaultLayerMaterial;
   }
 
+  void LegacyMaterialLayer::showImguiSettings(uint32_t hash, LegacyManager& legacyManager){
+    bool dirty = false;
+    static LegacyMaterialLayer materiaLayerCopy;
+    if (ImGui::Button("Reset Layer")) {
+      resetLayerMaterial();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Copy")) {
+      materiaLayerCopy = *this;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Paste")) {
+      *this = materiaLayerCopy;
+    }
+
+    if (ImGui::TreeNode("Features support")) {
+
+      auto drawFeature = [&dirty, this](const char* str, LegacyMaterialFeature feature) {
+        bool featureState = testFeatures(feature);
+        dirty |= ImGui::Checkbox(str, &featureState);
+        if (featureState) {
+          features |= feature;
+        } else {
+          features &= ~feature;
+        }
+        };
+
+      drawFeature("Albedo", LegacyMaterialFeature::Albedo);
+      drawFeature("Normal", LegacyMaterialFeature::Normal);
+      drawFeature("Roughness", LegacyMaterialFeature::Roughness);
+      drawFeature("Metallic", LegacyMaterialFeature::Metallic);
+      drawFeature("Height", LegacyMaterialFeature::Height);
+      drawFeature("Emissive", LegacyMaterialFeature::Emissive);
+      drawFeature("Sky", LegacyMaterialFeature::Sky);
+      drawFeature("RejectDecal", LegacyMaterialFeature::RejectDecal);
+      drawFeature("BackFaceCulling", LegacyMaterialFeature::BackFaceCulling);
+      drawFeature("NoFade", LegacyMaterialFeature::NoFade);
+      drawFeature("Water", LegacyMaterialFeature::Water);
+      drawFeature("Particle", LegacyMaterialFeature::Particle);
+      drawFeature("ParticleIgnoreLight", LegacyMaterialFeature::ParticleIgnoreLight);
+      drawFeature("Decals", LegacyMaterialFeature::Decals);
+      drawFeature("IgnoreOriginal", LegacyMaterialFeature::IgnoreOriginal);
+      drawFeature("RainTexture", LegacyMaterialFeature::RainTexture);
+      drawFeature("ParticleEmitter", LegacyMaterialFeature::ParticleEmitter);
+
+      ImGui::TreePop();
+    }
+
+
+    dirty |= ImGui::SliderInt("Alpha test reference value", &alphaTestReferenceValue, 0, 255, "%d", ImGuiSliderFlags_AlwaysClamp);
+
+    dirty |= ImGui::SliderFloat("Metallic Bias", &metallicBias, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    dirty |= ImGui::SliderFloat("Roughness Bias", &roughnessBias, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+    dirty |= ImGui::SliderFloat("Emissive Intensity", &emissiveIntensity, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+    dirty |= ImGui::SliderFloat("Normal Strength", &normalStrength, -10.0f, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    dirty |= ImGui::SliderFloat("Soft blend factor", &softBlendFactor, 0.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    dirty |= ImGui::SliderFloat("Alpha bias", &alphaBias, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+    if (ImGui::TreeNode("Displacement params")) {
+      dirty |= ImGui::SliderFloat("Displacement factor", &displacementFactor, -10.0f, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+      dirty |= ImGui::SliderFloat("Displacement Noise", &displacementNoise, 0.0f, 1.f, "%.03f", ImGuiSliderFlags_AlwaysClamp);
+      ImGui::TreePop();
+    }
+
+    if (dirty) {
+      legacyManager.pushDirtyMaterialLayer(hash);
+    }
+  }
+
+  void LegacyMeshLayer::showImguiSettings(uint32_t meshHash, LegacyMaterialLayer* legacyMaterialLayer, uint32_t materialLayerHash, LegacyManager& legacyManager) {
+    bool dirty = false;
+
+    if (ImGui::Checkbox("Override material", &overrideMaterial)) {
+      dirty = true;
+      materialLayer = *legacyMaterialLayer;
+    }
+    if (overrideMaterial) {
+      LegacyMaterialLayer* legacyMaterialLayer = &materialLayer;
+      legacyMaterialLayer->showImguiSettings(materialLayerHash, legacyManager);
+    }
+
+    dirty |= ImGui::SliderFloat3("World position offset", offset.data, -4000.0f, 4000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+    auto drawFeature = [&dirty, this](const char* str, LegacyMeshFeature feature) {
+      bool featureState = testFeatures(feature);
+      dirty |= ImGui::Checkbox(str, &featureState);
+      if (featureState) {
+        features |= feature;
+      } else {
+        features &= ~feature;
+      }
+      };
+
+    if (ImGui::TreeNode("Mesh Features")) {
+      drawFeature("CustomBlend", LegacyMeshFeature::CustomBlend);
+      drawFeature("FillHole", LegacyMeshFeature::FillHole);
+      drawFeature("HideMesh", LegacyMeshFeature::HideMesh);
+      drawFeature("NormalizeVertexColor", LegacyMeshFeature::NormalizeVertexColor);
+      ImGui::TreePop();
+    }
+    if (dirty) {
+      legacyManager.pushDirtyMeshLayer(meshHash);
+    }
+  }
+
 }

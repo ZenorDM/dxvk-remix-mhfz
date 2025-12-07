@@ -74,6 +74,8 @@ namespace dxvk {
     return static_cast<LegacyMaterialFeature>(static_cast<uint32_t>(a) ^ static_cast<uint32_t>(b));
   }
 
+  class LegacyManager;
+
   struct LegacyMaterialLayer {
 
     float roughnessBias = 0.0f;
@@ -95,6 +97,8 @@ namespace dxvk {
       return (features & feature) != LegacyMaterialFeature::None;
     }
     void resetLayerMaterial();
+
+    void showImguiSettings(uint32_t hash, LegacyManager& legacyManager);
   };
 
   enum class LegacyMeshFeature : uint16_t {
@@ -138,6 +142,8 @@ namespace dxvk {
     bool testFeatures(LegacyMeshFeature feature) const {
       return (features & feature) != LegacyMeshFeature::None;
     }
+
+    void showImguiSettings(uint32_t meshHash, LegacyMaterialLayer* legacyMaterialLayer, uint32_t materialLayerHash, LegacyManager& legacyManager);
   };
 
   struct LegacyManagedTextures {

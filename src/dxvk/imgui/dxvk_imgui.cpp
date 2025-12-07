@@ -1957,84 +1957,13 @@ namespace dxvk {
                 LegacyManager& legacyManager = device->getLegacyManager();
                 legacyManager.load();
               }
-              auto drawMaterialOptions = [&](LegacyMaterialLayer* legacyMaterialLayer) {
-                bool dirty = false;
-                static LegacyMaterialLayer materiaLayerCopy;
-                if (ImGui::Button("Reset Layer")) {
-                  legacyMaterialLayer->resetLayerMaterial();
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("Copy")) {
-                  materiaLayerCopy = *legacyMaterialLayer;
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("Paste")) {
-                  *legacyMaterialLayer = materiaLayerCopy;
-                }
 
-                if (ImGui::TreeNode("Features support")) {
-
-                  auto drawFeature = [&dirty, &legacyMaterialLayer](const char* str, LegacyMaterialFeature feature) {
-                    bool featureState = legacyMaterialLayer->testFeatures(feature);
-                    dirty |= ImGui::Checkbox(str, &featureState);
-                    if (featureState) {
-                      legacyMaterialLayer->features |= feature;
-                    } 
-                    else {
-                      legacyMaterialLayer->features &= ~feature;
-                    }
-                  };
-
-                  drawFeature("Albedo", LegacyMaterialFeature::Albedo);
-                  drawFeature("Normal", LegacyMaterialFeature::Normal);
-                  drawFeature("Roughness", LegacyMaterialFeature::Roughness);
-                  drawFeature("Metallic", LegacyMaterialFeature::Metallic);
-                  drawFeature("Height", LegacyMaterialFeature::Height);
-                  drawFeature("Emissive", LegacyMaterialFeature::Emissive);
-                  drawFeature("Sky", LegacyMaterialFeature::Sky);
-                  drawFeature("RejectDecal", LegacyMaterialFeature::RejectDecal);
-                  drawFeature("BackFaceCulling", LegacyMaterialFeature::BackFaceCulling);
-                  drawFeature("NoFade", LegacyMaterialFeature::NoFade);
-                  drawFeature("Water", LegacyMaterialFeature::Water);
-                  drawFeature("Particle", LegacyMaterialFeature::Particle);
-                  drawFeature("ParticleIgnoreLight", LegacyMaterialFeature::ParticleIgnoreLight);
-                  drawFeature("Decals", LegacyMaterialFeature::Decals);
-                  drawFeature("IgnoreOriginal", LegacyMaterialFeature::IgnoreOriginal);
-                  drawFeature("RainTexture", LegacyMaterialFeature::RainTexture);
-
-                  ImGui::TreePop();
-                }
-
-
-                dirty |= ImGui::SliderInt("Alpha test reference value", &legacyMaterialLayer->alphaTestReferenceValue, 0, 255, "%d", ImGuiSliderFlags_AlwaysClamp);
-
-                dirty |= ImGui::SliderFloat("Metallic Bias", &legacyMaterialLayer->metallicBias, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                dirty |= ImGui::SliderFloat("Roughness Bias", &legacyMaterialLayer->roughnessBias, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-
-                dirty |= ImGui::SliderFloat("Emissive Intensity", &legacyMaterialLayer->emissiveIntensity, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-
-                dirty |= ImGui::SliderFloat("Normal Strength", &legacyMaterialLayer->normalStrength, -10.0f, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                dirty |= ImGui::SliderFloat("Soft blend factor", &legacyMaterialLayer->softBlendFactor, 0.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                dirty |= ImGui::SliderFloat("Alpha bias", &legacyMaterialLayer->alphaBias, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-
-                if (ImGui::TreeNode("Displacement params")) {
-                  dirty |= ImGui::SliderFloat("Displacement factor", &legacyMaterialLayer->displacementFactor, -10.0f, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                  dirty |= ImGui::SliderFloat("Displacement Noise", &legacyMaterialLayer->displacementNoise, 0.0f, 1.f, "%.03f", ImGuiSliderFlags_AlwaysClamp);
-                  ImGui::TreePop();
-                }
-
-                if (dirty) {
-                  DxvkDevice* device = sceneMgr.device();
-                  LegacyManager& legacyManager = device->getLegacyManager();
-                  legacyManager.pushDirtyMaterialLayer(pair->second.originalHash);
-                }
-              };
-
-        
               if (ImGui::TreeNode("Legacy Material Layer")) {
                 LegacyMaterialLayer* legacyMaterialLayer = pair->second.legacyMaterialLayer;
                 if (legacyMaterialLayer) {
-                  drawMaterialOptions(legacyMaterialLayer);
+                  DxvkDevice* device = sceneMgr.device();
+                  LegacyManager& legacyManager = device->getLegacyManager();
+                  legacyMaterialLayer->showImguiSettings(pair->second.originalHash, legacyManager);
                 }
                 ImGui::TreePop();
               }
@@ -2045,42 +1974,7 @@ namespace dxvk {
                 LegacyMeshLayer* legacyMeshLayer = legacyManager.getLegacyMeshLayer(meshHash);
 
                 if (legacyMeshLayer){
-                  bool dirty = false;
-                  bool overrideMaterial = legacyMeshLayer->overrideMaterial;
-
-                  if (ImGui::Checkbox("Override material", &legacyMeshLayer->overrideMaterial)) {
-                    dirty = true;
-                    legacyMeshLayer->materialLayer = *pair->second.legacyMaterialLayer;
-                  }
-                  if (legacyMeshLayer->overrideMaterial) {
-                    LegacyMaterialLayer* legacyMaterialLayer = &legacyMeshLayer->materialLayer;
-                    drawMaterialOptions(legacyMaterialLayer);
-                  }
-
-                  dirty |= ImGui::SliderFloat3("World position offset", legacyMeshLayer->offset.data, -4000.0f, 4000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-
-                  auto drawFeature = [&dirty, &legacyMeshLayer](const char* str, LegacyMeshFeature feature) {
-                    bool featureState = legacyMeshLayer->testFeatures(feature);
-                    dirty |= ImGui::Checkbox(str, &featureState);
-                    if (featureState) {
-                      legacyMeshLayer->features |= feature;
-                    } else {
-                      legacyMeshLayer->features &= ~feature;
-                    }
-                    };
-
-                  if (ImGui::TreeNode("Mesh Features")) {
-                    drawFeature("CustomBlend", LegacyMeshFeature::CustomBlend);
-                    drawFeature("FillHole", LegacyMeshFeature::FillHole);
-                    drawFeature("HideMesh", LegacyMeshFeature::HideMesh);
-                    drawFeature("NormalizeVertexColor", LegacyMeshFeature::NormalizeVertexColor);
-                    ImGui::TreePop();
-                  }
-                  if (dirty) {
-                    DxvkDevice* device = sceneMgr.device();
-                    LegacyManager& legacyManager = device->getLegacyManager();
-                    legacyManager.pushDirtyMeshLayer(meshHash);
-                  }
+                  legacyMeshLayer->showImguiSettings(meshHash, pair->second.legacyMaterialLayer, pair->second.originalHash, legacyManager);
                 }
                 ImGui::TreePop();
               }
@@ -2625,7 +2519,7 @@ namespace dxvk {
           break;
         default:
           break;
-        }
+  }
         };
 
       if (ImGui::BeginTable("Buffer", 5)) {
@@ -2975,158 +2869,17 @@ namespace dxvk {
       ImGui::SliderFloat("Near fade distance", &RtxOptions::Get()->nearFadeDistanceObject(), 0.0f, 1.0f);
       static constexpr float MaxTransmittanceValue = 1.f - 1.f / 255.f;
       if (ImGui::TreeNode("Area")) {
+
         DxvkDevice* device = ctx->getCommonObjects()->getSceneManager().device();
         AreaManager& areaManager = device->getAreaManager();
         ImGui::Text("Time %u",areaManager.getTime());
 
-        auto drawArea = [&areaManager, &ctx](AreaData& _area) {
-          bool areaDirty = false;
-          if (ImGui::TreeNode("Light")) {
-            areaDirty |= ImGui::SliderFloat("Sky Brighness", &_area.skyBrightness, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            if (ImGui::TreeNode("Directional Lights")) {
-              if (ImGui::Button("Add Directional Light")) {
-                areaDirty = true;
-                _area.dirLightsData.push_back(AreaLightDataDir { });
-              }
-              uint lightId = 0;
-              uint toRemove = -1;
-              for (AreaLightDataDir& lightData : _area.dirLightsData) {
-                if (ImGui::TreeNode(std::to_string(lightId).c_str())) {
-                  if (ImGui::Button("Delete")) {
-                    toRemove = lightId;
-                    areaDirty = true;
-                  }
-
-                  areaDirty |= ImGui::SliderFloat3("Ligh Direction", lightData.lightDirection.data, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                  if (ImGui::Button("Use game original light direction")) {
-                    lightData.lightDirection = areaManager.getOriLightDir();
-                    areaDirty = true;
-                  }
-                  areaDirty |= ImGui::SliderFloat3("Ligh Radiance", lightData.lightRadiance.data, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                  if (ImGui::Button("X2")) {
-                    lightData.lightRadiance *= 2.0f;
-                    areaDirty = true;
-                  }
-                  ImGui::SameLine();
-                  if (ImGui::Button("/2")) {
-                    lightData.lightRadiance *= 0.5f;
-                    areaDirty = true;
-                  }
-                  ImGui::TreePop();
-                }
-                ++lightId;
-              }
-              if (toRemove != -1)
-                _area.dirLightsData.erase(_area.dirLightsData.begin() + toRemove);
-              ImGui::TreePop();
-            }
-            if (ImGui::TreeNode("Point Lights")) {
-              if (ImGui::Button("Add Point Light")) {
-                areaDirty = true;
-                _area.pointLightsData.push_back(AreaLightDataPoint { });
-              }
-              uint lightId = 0;
-              uint toRemove = -1;
-              for (AreaLightDataPoint& lightData : _area.pointLightsData) {
-                if (ImGui::TreeNode(std::to_string(lightId).c_str())) {
-                  if (ImGui::Button("Delete")) {
-                    toRemove = lightId;
-                    areaDirty = true;
-                  }
-
-
-                  areaDirty |= ImGui::SliderFloat3("Ligh Radiance", lightData.lightRadiance.data, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                  if (ImGui::Button("Init light position at camera pos")) {
-                    lightData.lightPosition = ctx->getCommonObjects()->getSceneManager().getCameraManager().getMainCamera().getPosition();
-                  }
-                  areaDirty |= ImGui::SliderFloat3("Ligh Position", lightData.lightPosition.data, -10000.0f, 10000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                  areaDirty |= ImGui::SliderFloat("Ligh Radius", &lightData.lightRadius, 0.01f, 10000.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                  if (ImGui::Button("X2")) {
-                    lightData.lightRadiance *= 2.0f;
-                    areaDirty = true;
-                  }
-                  ImGui::SameLine();
-                  if (ImGui::Button("/2")) {
-                    lightData.lightRadiance *= 0.5f;
-                    areaDirty = true;
-                  }
-                  ImGui::TreePop();
-                }
-                ++lightId;
-              }
-              if (toRemove != -1)
-                _area.pointLightsData.erase(_area.pointLightsData.begin() + toRemove);
-              ImGui::TreePop();
-            }
-
-            if (ImGui::TreeNode("Rect Lights")) {
-              if (ImGui::Button("Add Rect Light")) {
-                areaDirty = true;
-                _area.rectLightsData.push_back(AreaLightDataRect { });
-              }
-              uint lightId = 0;
-              uint toRemove = -1;
-              for (AreaLightDataRect& lightData : _area.rectLightsData) {
-                if (ImGui::TreeNode(std::to_string(lightId).c_str())) {
-                  if (ImGui::Button("Delete")) {
-                    toRemove = lightId;
-                    areaDirty = true;
-                  }
-
-
-                  areaDirty |= ImGui::SliderFloat3("Ligh Radiance", lightData.lightRadiance.data, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                  if (ImGui::Button("Init light position at camera pos")) {
-                    lightData.lightPosition = ctx->getCommonObjects()->getSceneManager().getCameraManager().getMainCamera().getPosition();
-                  }
-                  areaDirty |= ImGui::SliderFloat3("Ligh Position", lightData.lightPosition.data, -10000.0f, 10000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                  if (ImGui::SliderFloat3("Ligh rotation", lightData.rotation.data, 0.0, 360.0, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
-                    areaDirty = true;
-                    lightData.buildMatrix();
-                  }
-                  areaDirty |= ImGui::SliderFloat2("Ligh dimensions", lightData.dimensions.data, 0.0, 5000.0, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                  if (ImGui::Button("X2")) {
-                    lightData.lightRadiance *= 2.0f;
-                    areaDirty = true;
-                  }
-                  ImGui::SameLine();
-                  if (ImGui::Button("/2")) {
-                    lightData.lightRadiance *= 0.5f;
-                    areaDirty = true;
-                  }
-                  ImGui::TreePop();
-                }
-                ++lightId;
-              }
-              if (toRemove != -1)
-                _area.rectLightsData.erase(_area.rectLightsData.begin() + toRemove);
-              ImGui::TreePop();
-            }
-
-            ImGui::TreePop();
-          }
-          if (ImGui::TreeNode("Volumetric")) {
-            areaDirty |= ImGui::DragFloat3("Transmittance Color", _area.transmittanceColor.data, 0.01f, 0.0f, MaxTransmittanceValue, "%.3f");
-            areaDirty |= ImGui::DragFloat("Transmittance Measurement Distance", &_area.transmittanceMeasurementDistanceMeters, 0.25f, 0.0f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-            areaDirty |= ImGui::DragFloat3("Single Scattering Albedo", _area.singleScatteringAlbedo.data, 0.01f, 0.0f, 1.0f, "%.3f");
-
-            areaDirty |= ImGui::DragFloat("Anisotropy", &_area.anisotropy, 0.01f, -.99f, .99f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            areaDirty |= ImGui::Checkbox("Enable Heterogeneous Fog", &_area.enableHeterogeneousFog);
-
-            areaDirty |= ImGui::DragFloat("Noise Field Spatial Frequency", &_area.noiseFieldSpatialFrequency, 0.01f, 0.0f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-            areaDirty |= ImGui::DragInt("Noise Field Number of Octaves", &_area.noiseFieldOctaves, 1.f, 0, 10);
-            areaDirty |= ImGui::DragFloat("Noise Field Density Scale", &_area.noiseFieldDensityScale, 0.01f, 0.0f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-            ImGui::TreePop();
-          }
-          if (areaDirty) {
-            _area.lightDirty = true;
-            ctx->getCommonObjects()->getSceneManager().getLightManager().resetLightFallback();
-          }
-        };
-
         AreaData& currentArea = areaManager.getCurrentAreaData();
 
         if (ImGui::TreeNode("Current Area")) {
-          drawArea(currentArea);
+          currentArea.showImguiSettings(areaManager,
+                                        ctx->getCommonObjects()->getSceneManager().getCameraManager().getMainCamera().getPosition(),
+                                        ctx->getCommonObjects()->getSceneManager().getLightManager());
           ImGui::TreePop();
         }
 
