@@ -108,6 +108,23 @@ void collideParticleWithScene(inout GpuParticle p)
   }
 }
 
+// MHFZ start : repulsive method
+float3 computeRepulseFromTraget(GpuParticle particle, const GpuParticleSystem particleSystem) {
+
+  float3 dir = particle.position - float3(particleSystem.desc.targetPos.x, particleSystem.desc.targetPos.y + 85, particleSystem.desc.targetPos.z);
+  float dist = length(dir);
+
+  float invDist = rsqrt(max(dist * dist, 1e-8));
+  float3 n = dir * invDist;
+
+  float inside = step(dist, 200);
+
+  float atten = (1.0 - saturate(dist / 200)) * inside;
+
+  return n * (500.0 * atten * particleCb.deltaTimeSecs);
+}
+// MHFZ end
+
 // Updates a particles state for one time step
 void evolve(inout GpuParticle particle, const GpuParticleSystem particleSystem)
 {

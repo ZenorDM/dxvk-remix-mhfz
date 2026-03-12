@@ -31,7 +31,17 @@ namespace dxvk {
 
   class AreaManager;
 
+  struct ParticleData {
+    ParticleData();
+    RtxParticleSystemDesc particleDesc;
+    ParticleSystemMaterial particleMaterial;
+    ParticleDataSpawnContext spawnCtx;
+  };
+
   struct AreaData {
+    //Particle
+    std::vector<ParticleData> particleSystems;
+
     // light values
     std::vector<AreaLightDataDir > dirLightsData;
     std::vector<AreaLightDataPoint > pointLightsData;
@@ -78,6 +88,10 @@ namespace dxvk {
     uint32_t getCurrentAreaID();
     AreaData& getAreaData(uint32_t area);
     AreaData& getCurrentAreaData();
+
+    bool isParticleSystemFetched();
+    std::vector<ParticleData>& getCurrentParticleSystemList();
+
     void save();
     void load();
     void setOriLightDir(const Vector3& lightDir) {
@@ -85,6 +99,14 @@ namespace dxvk {
     }
     const Vector3& getOriLightDir() const {
       return m_oriLightDir;
+    }
+
+    void setPlayerPos(const Vector3& pos) {
+      m_playerPos = pos;
+    }
+
+    const Vector3& getPlayerPos() const {
+      return m_playerPos;
     }
 
     float getSkyBrightness() {
@@ -114,8 +136,10 @@ namespace dxvk {
 
   private:
 
+    bool particleFetched = false;
     std::unordered_map<uint32_t, AreaData> m_areas;
     Vector3 m_oriLightDir;
+    Vector3 m_playerPos;
     uint32_t m_currentArea = 0;
     uint32_t m_time = 0;
     uint32_t m_questID = 0;

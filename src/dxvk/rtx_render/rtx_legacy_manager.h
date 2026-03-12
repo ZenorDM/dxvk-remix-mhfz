@@ -5,6 +5,7 @@
 #include "rtx_texture.h"
 #include "d3d9.h"
 #include "rtx_option.h"
+#include "rtx/pass/particles/particle_system_common.h"
 
 namespace dxvk {
 
@@ -48,6 +49,7 @@ namespace dxvk {
     IgnoreOriginal = 1 << 14,
     RainTexture = 1 << 15,
     ParticleIgnoreLight = 1 << 16,
+    ParticleEmitter = 1 << 17,
     Default = Albedo | Normal | Roughness | Metallic,
     All = Albedo | Normal | Roughness | Metallic | Height,
   };
@@ -77,6 +79,10 @@ namespace dxvk {
   class LegacyManager;
 
   struct LegacyMaterialLayer {
+    LegacyMaterialLayer();
+    RtxParticleSystemDesc particleDesc;
+    ParticleSystemMaterial particleMaterial;
+    ParticleDataSpawnContext particleSpawnCtx;
 
     float roughnessBias = 0.0f;
     float metallicBias = 0.0f;

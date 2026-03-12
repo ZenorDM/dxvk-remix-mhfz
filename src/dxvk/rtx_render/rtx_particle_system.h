@@ -48,6 +48,9 @@ namespace dxvk {
       uint32_t instanceId;
       XXH64_hash_t particleSystemHash;
       uint32_t particleOffset;
+      // MHFZ start
+      ParticleDataSpawnContext context;
+      // MHFZ end
     };
 
     class ConservativeCounter : public RcObject {
@@ -78,7 +81,7 @@ namespace dxvk {
 
     private:
       Rc<DxvkBuffer> m_particles;
-      Rc<DxvkBuffer> m_spawnContextParticleMapBuffer;
+      Rc<DxvkBuffer> m_spawnGpuContext;
       Rc<DxvkBuffer> m_vb;
       Rc<DxvkBuffer> m_ib;
       Rc<ConservativeCounter> m_count;
@@ -86,7 +89,9 @@ namespace dxvk {
 
     public:
       const MaterialData materialData;
-
+      // MHFZ start
+      const ParticleSystemMaterial particleMaterial;
+      // MHFZ end
       const CategoryFlags categories;
 
       uint64_t lastSpawnTimeMs;
@@ -99,8 +104,12 @@ namespace dxvk {
 
       uint32_t generationIdx = 0;
 
+      // MHFZ start
+      bool areaSystem;
+      // MHFZ end
+
       ParticleSystem() = delete;
-      ParticleSystem(const RtxParticleSystemDesc& desc, const MaterialData& matData, const CategoryFlags& cats, const uint32_t seed);
+      ParticleSystem(const RtxParticleSystemDesc& desc, const ParticleSystemMaterial& particleMaterial, const MaterialData& matData, const CategoryFlags& cats, const uint32_t seed, ParticleDataSpawnContext* spawnContext, uint32_t areaPaticleSystemIndex);
 
       XXH64_hash_t getHash() const {
         return m_cachedHash;
@@ -122,8 +131,8 @@ namespace dxvk {
         return m_particles;
       }
 
-      const Rc<DxvkBuffer>& getSpawnContextMappingBuffer() const {
-        return m_spawnContextParticleMapBuffer;
+      const Rc<DxvkBuffer>& getSpawnGpuContextBuffer() const {
+        return m_spawnGpuContext;
       }
 
       const Rc<DxvkBuffer>& getVertexBuffer() const {
@@ -152,7 +161,6 @@ namespace dxvk {
     Rc<DxvkBuffer> m_cb;
 
     fast_unordered_cache<std::shared_ptr<ParticleSystem>> m_particleSystems;
-    Rc<DxvkBuffer> m_spawnContextsBuffer;
 
     // Monotonically increases as new particle systems are created.  Never decrements.
     uint32_t m_particleSystemCounter = 0;
@@ -205,7 +213,7 @@ namespace dxvk {
 
     void prepareForNextFrame();
 
-    bool fetchParticleSystem(DxvkContext* ctx, const DrawCallState& drawCallState, const RtxParticleSystemDesc& desc, const MaterialData* overrideMaterial, ParticleSystem** materialSystem);
+    bool fetchParticleSystem(DxvkContext* ctx, const DrawCallState& drawCallState, const RtxParticleSystemDesc& desc, const ParticleSystemMaterial& particleMaterial, const MaterialData* overrideMaterial, ParticleSystem** materialSystem, ParticleDataSpawnContext* spawnContext, uint32_t areaPaticleSystemIndex);
 
     static uint32_t getNumberOfParticlesToSpawn(ParticleSystem* materialSystem, const DrawCallState& drawCallState);
 
@@ -217,11 +225,24 @@ namespace dxvk {
       * Displays ImGui settings for this particle system.
       */
     static void showImguiSettings();
-
+    // MHFZ start
+    static bool showImguiSettings(ParticleDataSpawnContext& spawnCtx, RtxParticleSystemDesc& particleDesc, ParticleSystemMaterial& material, const Vector3& cameraPosition);
+    static bool showImguiSettings(RtxParticleSystemDesc& particleDesc);
+    // MHFZ end
     /**
       * Creates a valid descriptor for a particle system using the global settings.
       */
     static RtxParticleSystemDesc createGlobalParticleSystemDesc();
+
+    // MHFZ start
+    static ParticleSystemMaterial createGlobalParticleSystemMaterial();
+
+    static ParticleDataSpawnContext createGlobalParticleSystemSpawnContext();
+
+    static void save(std::string path, pxr::UsdStageRefPtr stage, const RtxParticleSystemDesc& desc, const ParticleSystemMaterial& particleMaterial, const ParticleDataSpawnContext& spawnContext);
+
+    static void load(std::string path, pxr::UsdStageRefPtr stage, RtxParticleSystemDesc& desc, ParticleSystemMaterial& particleMaterial, ParticleDataSpawnContext& spawnContext);
+    // MHFZ end
 
     /**
       * Spawns particles for a given instance
@@ -236,7 +257,7 @@ namespace dxvk {
       * \param drawCallState    The current draw call state referencing material info.
       * \param overrideMaterial The material preference to apply to particle system
       */
-    void spawnParticles(DxvkContext* ctx, const RtxParticleSystemDesc& desc, const uint32_t instanceIdx, const DrawCallState& drawCallState, const MaterialData* overrideMaterial);
+    void spawnParticles(DxvkContext* ctx, const RtxParticleSystemDesc& desc, ParticleSystemMaterial& particleMaterial, const uint32_t instanceIdx, const DrawCallState& drawCallState, const MaterialData* overrideMaterial, ParticleDataSpawnContext* spawnContext = nullptr, uint32_t areaPaticleSystemIndex = 255);
 
     /**
       * Issues the draw state (vertex buffer, index buffer) for rendering particles

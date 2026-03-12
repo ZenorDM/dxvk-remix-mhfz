@@ -9,6 +9,8 @@
 #include <pxr/usd/usdGeom/mesh.h>
 #include "../../lssusd/usd_include_end.h"
 
+#include "rtx_particle_system.h"
+
 using namespace pxr;
 
 namespace dxvk {
@@ -439,6 +441,9 @@ namespace dxvk {
           UsdStageRefPtr stage = UsdStage::Open(usdPath.u8string());
 
           loadMaterialLayer(stage, legacyMaterial);
+          if (legacyMaterial.testFeatures(LegacyMaterialFeature::ParticleEmitter)) {
+            RtxParticleSystemManager::load("", stage, legacyMaterial.particleDesc, legacyMaterial.particleMaterial, legacyMaterial.particleSpawnCtx);
+          }
           std::unique_lock<std::mutex> lock(mtx);
           m_legacyMaterialsLayer.emplace(hash, std::move(legacyMaterial));
         }
@@ -484,6 +489,9 @@ namespace dxvk {
 
           if (legacyMesh.overrideMaterial) {
             loadMaterialLayer(stage, legacyMesh.materialLayer);
+            if (legacyMesh.materialLayer.testFeatures(LegacyMaterialFeature::ParticleEmitter)) {
+              RtxParticleSystemManager::load("", stage, legacyMesh.materialLayer.particleDesc, legacyMesh.materialLayer.particleMaterial, legacyMesh.materialLayer.particleSpawnCtx);
+            }
           }
           std::unique_lock<std::mutex> lock(mtx);
           m_legacyMeshesLayer.emplace(hash, std::move(legacyMesh));
@@ -511,7 +519,9 @@ namespace dxvk {
         UsdStageRefPtr stage = UsdStage::CreateNew(usdPath.u8string());
 
         saveMaterialLayer(stage, materialLayer);
-
+        if (materialLayer.testFeatures(LegacyMaterialFeature::ParticleEmitter)) {
+          RtxParticleSystemManager::save("", stage, materialLayer.particleDesc, materialLayer.particleMaterial, materialLayer.particleSpawnCtx);
+        }
         stage->GetRootLayer()->Save();
       }
     }
@@ -548,6 +558,9 @@ namespace dxvk {
 
         if (meshLayer.overrideMaterial) {
           saveMaterialLayer(stage, meshLayer.materialLayer);
+          if (meshLayer.materialLayer.testFeatures(LegacyMaterialFeature::ParticleEmitter)) {
+            RtxParticleSystemManager::save("", stage, meshLayer.materialLayer.particleDesc, meshLayer.materialLayer.particleMaterial, meshLayer.materialLayer.particleSpawnCtx);
+          }
         }
 
         stage->GetRootLayer()->Save();
@@ -814,6 +827,12 @@ namespace dxvk {
     m_legacyMeshesLayerModified.emplace(_hash);
   }
 
+  LegacyMaterialLayer::LegacyMaterialLayer() { 
+    particleDesc = RtxParticleSystemManager::createGlobalParticleSystemDesc();
+    particleMaterial = RtxParticleSystemManager::createGlobalParticleSystemMaterial();
+    particleSpawnCtx = RtxParticleSystemManager::createGlobalParticleSystemSpawnContext();
+  }
+
   void LegacyMaterialLayer::resetLayerMaterial() {
     *this = defaultLayerMaterial;
   }
@@ -866,22 +885,29 @@ namespace dxvk {
       ImGui::TreePop();
     }
 
+    if(ImGui::TreeNode("Params"))
+    { 
+      dirty |= ImGui::SliderInt("Alpha test reference value", &alphaTestReferenceValue, 0, 255, "%d", ImGuiSliderFlags_AlwaysClamp);
 
-    dirty |= ImGui::SliderInt("Alpha test reference value", &alphaTestReferenceValue, 0, 255, "%d", ImGuiSliderFlags_AlwaysClamp);
+      dirty |= ImGui::SliderFloat("Metallic Bias", &metallicBias, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+      dirty |= ImGui::SliderFloat("Roughness Bias", &roughnessBias, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 
-    dirty |= ImGui::SliderFloat("Metallic Bias", &metallicBias, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    dirty |= ImGui::SliderFloat("Roughness Bias", &roughnessBias, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+      dirty |= ImGui::SliderFloat("Emissive Intensity", &emissiveIntensity, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 
-    dirty |= ImGui::SliderFloat("Emissive Intensity", &emissiveIntensity, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+      dirty |= ImGui::SliderFloat("Normal Strength", &normalStrength, -10.0f, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+      dirty |= ImGui::SliderFloat("Soft blend factor", &softBlendFactor, 0.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+      dirty |= ImGui::SliderFloat("Alpha bias", &alphaBias, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+      ImGui::TreePop();
+    }
 
-    dirty |= ImGui::SliderFloat("Normal Strength", &normalStrength, -10.0f, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    dirty |= ImGui::SliderFloat("Soft blend factor", &softBlendFactor, 0.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    dirty |= ImGui::SliderFloat("Alpha bias", &alphaBias, -1.0f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-
-    if (ImGui::TreeNode("Displacement params")) {
+    if (testFeatures(LegacyMaterialFeature::Height) && ImGui::TreeNode("Displacement params")) {
       dirty |= ImGui::SliderFloat("Displacement factor", &displacementFactor, -10.0f, 10.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
       dirty |= ImGui::SliderFloat("Displacement Noise", &displacementNoise, 0.0f, 1.f, "%.03f", ImGuiSliderFlags_AlwaysClamp);
       ImGui::TreePop();
+    }
+
+    if (testFeatures(LegacyMaterialFeature::ParticleEmitter)) {
+      dirty |= RtxParticleSystemManager::showImguiSettings(particleSpawnCtx, particleDesc, particleMaterial, Vector3(0.0f, 0.0f, 0.0f));
     }
 
     if (dirty) {

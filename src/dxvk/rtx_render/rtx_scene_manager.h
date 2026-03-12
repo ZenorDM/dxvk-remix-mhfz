@@ -241,7 +241,8 @@ private:
                                                   const MaterialData& renderMaterialData,
                                                   const DrawCallState& drawCallState,
                                                   uint32_t* out_indexInCache = nullptr,
-                                                  LegacyMeshLayer* legacyMeshLayer = nullptr);
+                                                  LegacyMeshLayer* legacyMeshLayer = nullptr,
+                                                  LegacyMaterialLayer* legacyMaterialLayer = nullptr);
   // MHFZ end
   // Updates ref counts for new buffers
   void updateBufferCache(RaytraceGeometry& newGeoData);

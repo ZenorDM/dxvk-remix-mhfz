@@ -24,6 +24,11 @@
 #include "rtx/pass/common_binding_indices.h"
 #include "rtx/utility/shader_types.h"
 #include "particle_system_enums.h"
+// MHFZ start
+#ifdef __cplusplus
+#include "../../../../rtx_render/rtx_texture.h"
+#endif
+// MHFZ end
 
 struct GpuSpawnContext {
   mat4x3 spawnObjectToWorld;
@@ -44,6 +49,17 @@ struct GpuSpawnContext {
   uint16_t spawnMeshColorsIdx;
   uint16_t spawnMeshIndexIdx;
   uint16_t spawnMeshTexcoordsIdx;
+
+  // MHFZ start
+  vec3 boxDim;
+  float radius;
+
+  vec3 spawnDir;
+  uint pad;
+  ParticleSpawnType spawnType;
+  uint8_t pad2;
+  uint16_t pad3;
+  // MHFZ end
 };
 
 struct RtxParticleSystemDesc {
@@ -91,6 +107,10 @@ struct RtxParticleSystemDesc {
   uint8_t enableCollisionDetection;
   uint8_t pad;
 
+  // MHFZ start
+  vec3 targetPos;
+  uint pad3;
+  // MHFZ end
 #ifdef __cplusplus
   RtxParticleSystemDesc() {
     // This struct can be hashed so ensure its initialized
@@ -191,3 +211,29 @@ struct ParticleSystemConstants {
   uint pad1;
   uint pad2;
 };
+
+// MHFZ start
+#ifdef __cplusplus
+struct ParticleSystemMaterial {
+  float emissiveIntensity;
+  std::string m_albedoPath;
+  dxvk::Rc<dxvk::ManagedTexture> m_albedoTexture;
+
+  XXH64_hash_t calcHash() const {
+    return XXH3_64bits(this, sizeof(*this));
+  }
+};
+
+struct ParticleDataSpawnContext {
+  vec3 emitterWorldPos;
+  vec3 boxDim;
+  float radius;
+  vec3 spawnDir;
+  ParticleSpawnType spawnType;
+
+  XXH64_hash_t calcHash() const {
+    return XXH3_64bits(this, sizeof(*this));
+  }
+};
+#endif
+// MHFZ end

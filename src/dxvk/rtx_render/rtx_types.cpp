@@ -84,6 +84,10 @@ namespace dxvk {
         if (legacyMaterialLayer->testFeatures(LegacyMaterialFeature::Decals)) {
           setCategory(InstanceCategories::DecalStatic, true);
         }
+
+        if (legacyMaterialLayer->testFeatures(LegacyMaterialFeature::ParticleEmitter)) {
+          setCategory(InstanceCategories::ParticleEmitter, true);
+        }
       }
 
       if (testCategoryFlags(InstanceCategories::Particle)) {

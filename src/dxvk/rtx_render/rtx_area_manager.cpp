@@ -7,11 +7,11 @@
 #include <pxr/usd/usdLux/sphereLight.h>
 #include <pxr/usd/usdLux/rectLight.h>
 #include <pxr/usd/usdLux/distantLight.h>
-#include <pxr/usd/usd/primRange.h>
 #include "../../lssusd/usd_include_end.h"
 
 #include "imgui/imgui.h"
 #include "rtx_light_manager.h"
+#include "rtx_particle_system.h"
 
 using namespace pxr;
 
@@ -31,6 +31,7 @@ namespace dxvk {
     }
 
     void AreaManager::update() { 
+      particleFetched = false;
     }
 
     void AreaManager::setDay() {
@@ -59,6 +60,17 @@ namespace dxvk {
       return m_areas[m_currentArea];
     }
 
+    bool AreaManager::isParticleSystemFetched()
+    {
+      return particleFetched;
+    }
+
+    std::vector<ParticleData>& AreaManager::getCurrentParticleSystemList()
+    {
+      particleFetched = true;
+      return getCurrentAreaData().particleSystems;
+    }
+
     void AreaManager::load() {
         wchar_t file_prefix[MAX_PATH] = L"";
         GetModuleFileNameW(nullptr, file_prefix, ARRAYSIZE(file_prefix));
@@ -71,7 +83,6 @@ namespace dxvk {
           if (std::filesystem::exists(usdPath)){
             AreaData area;
             UsdStageRefPtr stage = UsdStage::Open(usdPath.u8string());
-
             {
               UsdPrim generic = stage->GetPrimAtPath(SdfPath("/Generic"));
 
@@ -96,9 +107,20 @@ namespace dxvk {
               transmittanceMeasurementDistanceMetersAttr.Get(&area.transmittanceMeasurementDistanceMeters);
             }
             {
+              UsdPrim prism = stage->GetPrimAtPath(SdfPath("/ParticleEmitters"));
+              uint32_t particleEmitterId = 0;
+              for (const UsdPrim& particleEmitter : prism.GetAllChildren()) {
+                ParticleData particleSystem;
+                std::string path = std::string("/ParticleEmitters/ParticleEmitter_" + std::to_string(particleEmitterId));
+                RtxParticleSystemManager::load(particleEmitter.GetPath().GetString(), stage, particleSystem.particleDesc, particleSystem.particleMaterial, particleSystem.spawnCtx);
+                area.particleSystems.emplace_back(std::move(particleSystem));
+                ++particleEmitterId;
+              }
+            }
+            {
               UsdPrim prism = stage->GetPrimAtPath(SdfPath("/DistantLights"));
    
-              for (const UsdPrim& light : UsdPrimRange(prism)) {
+              for (const UsdPrim& light : prism.GetAllChildren()) {
                 AreaLightDataDir dirLight;
                 auto colorAttr = light.GetAttribute(TfToken("inputs:color"));
                 GfVec3f color;
@@ -117,7 +139,7 @@ namespace dxvk {
             {
               UsdPrim prism = stage->GetPrimAtPath(SdfPath("/SphereLights"));
 
-              for (const UsdPrim& light : UsdPrimRange(prism)) {
+              for (const UsdPrim& light : prism.GetAllChildren()) {
                 AreaLightDataPoint pointLight;
                 auto colorAttr = light.GetAttribute(TfToken("inputs:color"));
                 GfVec3f color;
@@ -146,7 +168,7 @@ namespace dxvk {
             {
               UsdPrim prism = stage->GetPrimAtPath(SdfPath("/RectLights"));
 
-              for (const UsdPrim& light : UsdPrimRange(prism)) {
+              for (const UsdPrim& light : prism.GetAllChildren()) {
                 AreaLightDataRect rectLight;
                 auto colorAttr = light.GetAttribute(TfToken("inputs:color"));
                 GfVec3f color;
@@ -239,6 +261,17 @@ namespace dxvk {
         }
 
         {
+          UsdPrim particles = stage->DefinePrim(SdfPath { "/ParticleEmitters" });
+          uint32_t particleEmitterId = 0;
+          for (auto& particleSystem : area.particleSystems) {
+            std::string path = std::string("/ParticleEmitters/ParticleEmitter_" + std::to_string(particleEmitterId));
+            UsdPrim particle = stage->DefinePrim(SdfPath { path });
+            RtxParticleSystemManager::save(path, stage, particleSystem.particleDesc, particleSystem.particleMaterial, particleSystem.spawnCtx);
+            ++particleEmitterId;
+          }
+        }
+
+        {
           UsdPrim light = stage->DefinePrim(SdfPath { "/DistantLights" });
           uint32_t dirLightIndex = 0;
           for (auto& lightDir : area.dirLightsData) {
@@ -319,6 +352,33 @@ namespace dxvk {
     {
       static constexpr float MaxTransmittanceValue = 1.f - 1.f / 255.f;
       bool areaDirty = false;
+
+      if (ImGui::TreeNode("Particles")) {
+        if (ImGui::Button("Add Particle System")) {
+          areaDirty = true;
+          particleSystems.push_back(ParticleData{ });
+        }
+        uint particleID = 0;
+        uint toRemove = -1;
+        for (ParticleData& particleData : particleSystems) {
+          if (ImGui::TreeNode(std::to_string(particleID).c_str())) {
+            if (ImGui::Button("Delete")) {
+              toRemove = particleID;
+              areaDirty = true;
+            }
+
+            RtxParticleSystemManager::showImguiSettings(particleData.spawnCtx, particleData.particleDesc, particleData.particleMaterial, cameraPosition);
+            ImGui::TreePop();
+          }
+          ++particleID;
+        }
+
+        if (toRemove != -1)
+          particleSystems.erase(particleSystems.begin() + toRemove);
+
+        ImGui::TreePop();
+      }
+
       if (ImGui::TreeNode("Light")) {
         areaDirty |= ImGui::SliderFloat("Sky Brighness", &skyBrightness, 0.0f, 100.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
         if (ImGui::TreeNode("Directional Lights")) {
@@ -459,6 +519,13 @@ namespace dxvk {
         lightDirty = true;
         lightManager.resetLightFallback();
       }
+    }
+
+    ParticleData::ParticleData()
+    {
+      particleDesc = RtxParticleSystemManager::createGlobalParticleSystemDesc();
+      particleMaterial = RtxParticleSystemManager::createGlobalParticleSystemMaterial();
+      spawnCtx = RtxParticleSystemManager::createGlobalParticleSystemSpawnContext();
     }
 
 }

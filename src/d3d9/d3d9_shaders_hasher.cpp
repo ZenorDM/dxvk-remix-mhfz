@@ -6,7 +6,6 @@
 #include "../../lssusd/usd_include_begin.h"
 #include <pxr/usd/usd/stage.h>
 #include <pxr/usd/usd/attribute.h>
-#include <pxr/usd/usd/primRange.h>
 #include "../../lssusd/usd_include_end.h"
 
 using namespace pxr;
@@ -294,7 +293,7 @@ namespace dxvk {
       for (uint32_t i = 0; i < (uint32_t) ShaderType::Count; ++i) {
         UsdPrim shaderContainer = stage->GetPrimAtPath(SdfPath(std::string("/" + std::string(ShaderTypeStr[i]))));
 
-        for (const UsdPrim& shader : UsdPrimRange(shaderContainer)) {
+        for (const UsdPrim& shader : shaderContainer.GetAllChildren()) {
           uint32_t hash;
           ShaderDesc shaderDesc;
           auto shaderHashAttr = shader.GetAttribute(TfToken("shaderHash"));

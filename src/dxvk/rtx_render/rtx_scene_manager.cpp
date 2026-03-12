@@ -762,7 +762,7 @@ namespace dxvk {
 
         if (pInstance && isParticleSystem) {
           RtxParticleSystemManager& particleSystem = device()->getCommon()->metaParticleSystem();
-          particleSystem.spawnParticles(ctx.ptr(), replacement.particleSystem.value(), pInstance->getVectorIdx(), newDrawCallState, overrideMaterialData);
+          particleSystem.spawnParticles(ctx.ptr(), replacement.particleSystem.value(), RtxParticleSystemManager::createGlobalParticleSystemMaterial(), pInstance->getVectorIdx(), newDrawCallState, overrideMaterialData);
           if (pParticleSystemDesc->hideEmitter) {
             pInstance->setHidden(true);
           }
@@ -962,7 +962,23 @@ namespace dxvk {
 
     // Note: Use either the specified override Material Data or the original draw calls state's Material Data to create a Surface Material if no override is specified
     const auto renderMaterialDataType = renderMaterialData.getType();
-    RtSurfaceMaterial& surfaceMaterial = createSurfaceMaterial(ctx, renderMaterialData, drawCallState, nullptr, legacyMeshLayer);
+    // MHFZ start
+    LegacyMaterialLayer* legacyMaterialLayer = nullptr;
+    if (renderMaterialDataType == MaterialDataType::Legacy) {
+      // MHFZ start : get Legacy Manager
+      LegacyManager& legacyManager = m_device->getLegacyManager();
+      legacyManager.pushMeshMaterial(drawCallState.getGeometryData().getHashForRule<rules::TopologicalHash>());
+      // MHFZ end
+      // MHFZ start : retrieve legacy material layer to use
+      const auto& legacyMaterialData = renderMaterialData.getLegacyMaterialData();
+      legacyMaterialLayer = legacyMaterialData.materialLayer;
+      if (legacyMeshLayer && legacyMeshLayer->overrideMaterial) {
+        legacyMaterialLayer = &legacyMeshLayer->materialLayer;
+      }
+      // MHFZ end
+    }
+    RtSurfaceMaterial& surfaceMaterial = createSurfaceMaterial(ctx, renderMaterialData, drawCallState, nullptr, legacyMeshLayer, legacyMaterialLayer);
+    // MHFZ end
     RtInstance* instance = m_instanceManager.processSceneObject(m_cameraManager, m_rayPortalManager, *pBlas, drawCallState, renderMaterialData, surfaceMaterial);
 
     // Check if a light should be created for this Material
@@ -1001,10 +1017,27 @@ namespace dxvk {
           "Ignoring further MetaInfo-s, some objects might be not be available through object picking"));
       }
     }
+    // MHFZ start : spawn area particle systems
+    AreaManager& areaManager = m_device->getAreaManager();
+    if (areaManager.isParticleSystemFetched() == false) {
+      auto& particleSystems = areaManager.getCurrentParticleSystemList();
+      RtxParticleSystemManager& particleSystem = device()->getCommon()->metaParticleSystem();
+      uint32_t index = 0;
+      for (ParticleData& particleData : particleSystems) {
+        particleSystem.spawnParticles(ctx.ptr(), particleData.particleDesc, particleData.particleMaterial, instance->getVectorIdx(), drawCallState, nullptr, &particleData.spawnCtx, index);
+        ++index;
+      }
+    }
+    // MHFZ end
 
     if (instance && drawCallState.getCategoryFlags().test(InstanceCategories::ParticleEmitter)) {
       RtxParticleSystemManager& particleSystem = device()->getCommon()->metaParticleSystem();
-      particleSystem.spawnParticles(ctx.ptr(), RtxParticleSystemManager::createGlobalParticleSystemDesc(), instance->getVectorIdx(), drawCallState, nullptr);
+      // MHFZ start
+      if(legacyMaterialLayer)
+        particleSystem.spawnParticles(ctx.ptr(), legacyMaterialLayer->particleDesc, legacyMaterialLayer->particleMaterial, instance->getVectorIdx(), drawCallState, nullptr, &legacyMaterialLayer->particleSpawnCtx);
+      else
+        particleSystem.spawnParticles(ctx.ptr(), RtxParticleSystemManager::createGlobalParticleSystemDesc(), RtxParticleSystemManager::createGlobalParticleSystemMaterial(), instance->getVectorIdx(), drawCallState, nullptr);
+      // MHFZ end    
     }
 
     return instance;
@@ -1015,15 +1048,13 @@ namespace dxvk {
                                                                 const MaterialData& renderMaterialData,
                                                                 const DrawCallState& drawCallState,
                                                                 uint32_t* out_indexInCache,
-                                                                LegacyMeshLayer* legacyMeshLayer) {
+                                                                LegacyMeshLayer* legacyMeshLayer,
+                                                                LegacyMaterialLayer* legacyMaterialLayer) {
   // MHFZ end
     ScopedCpuProfileZone();
     const bool hasTexcoords = drawCallState.hasTextureCoordinates();
     const auto renderMaterialDataType = renderMaterialData.getType();
-    // MHFZ start : get Legacy Manager
-    LegacyManager& legacyManager = m_device->getLegacyManager();
-    legacyManager.pushMeshMaterial(drawCallState.getGeometryData().getHashForRule<rules::TopologicalHash>());
-    // MHFZ end
+
     // We're going to use this to create a modified sampler for replacement textures.
     // Legacy and replacement materials should follow same filtering but due to lack of override capability per texture
     // legacy textures use original sampler to stay true to the original intent while replacements use more advanced filtering
@@ -1132,13 +1163,6 @@ namespace dxvk {
         emissiveColorConstant = defaults.emissiveColorConstant();
         enableEmissive = defaults.enableEmissive();
 
-        // MHFZ start : retrieve legacy material layer to use
-        auto* legacyMaterialLayer = legacyMaterialData.materialLayer;
-        if (legacyMeshLayer && legacyMeshLayer->overrideMaterial) {
-          legacyMaterialLayer = &legacyMeshLayer->materialLayer;
-        }
-        // MHFZ end
-
         if (RtxOptions::Get()->getWhiteMaterialModeEnabled()) {
           albedoOpacityConstant = kWhiteModeAlbedo;
           metallicConstant = 0.f;
@@ -1205,6 +1229,11 @@ namespace dxvk {
           normalIntensity = legacyMaterialLayer->normalStrength;
           emissiveIntensity = legacyMaterialLayer->emissiveIntensity;
 
+          if (legacyMaterialData.emissiveIntensity > 0.0f) {
+            enableEmissive = true;
+            emissiveIntensity *= legacyMaterialData.emissiveIntensity;
+            emissiveColorConstant = Vector3(1.0f, 1.0f, 1.0f);
+          }
           roughnessConstant = legacyMaterialLayer->roughnessBias;
           if (legacyMaterialLayer->testFeatures(LegacyMaterialFeature::RainTexture)) {
             areaManager.rainRegister();

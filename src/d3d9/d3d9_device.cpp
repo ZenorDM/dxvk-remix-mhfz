@@ -63,6 +63,7 @@ struct MHFZGameData : public IMHFZGameData {
   uint32_t areaID;
   uint32_t time;
   uint32_t questID;
+  float playerPos[3];
 };
 
 struct MHFZConfigData : public IMHFZConfigData {
@@ -3761,6 +3762,7 @@ namespace dxvk {
     m_dxvkDevice->getAreaManager().setArea(data->areaID);
     m_dxvkDevice->getAreaManager().setTime(data->time);
     m_dxvkDevice->getAreaManager().setQuestID(data->questID);
+    m_dxvkDevice->getAreaManager().setPlayerPos(Vector3(data->playerPos));
     return S_OK;
   }
 

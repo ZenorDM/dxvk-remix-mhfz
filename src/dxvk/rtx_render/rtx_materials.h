@@ -1635,6 +1635,9 @@ struct LegacyMaterialData {
 private:
   friend class RtxContext;
   friend struct D3D9Rtx;
+  // MHFZ start
+  friend class RtxParticleSystemManager;
+  // MHFZ end 
   friend class TerrainBaker;
   friend class SceneManager;
   friend struct RemixAPIPrivateAccessor;
@@ -1660,6 +1663,7 @@ private:
   TextureRef heightTexture = {};
   TextureRef emissiveTexture = {};
   LegacyMaterialLayer* materialLayer;
+  float emissiveIntensity = 0.0f;
   // MHFZ end
 
   XXH64_hash_t m_cachedHash = kEmptyHash;

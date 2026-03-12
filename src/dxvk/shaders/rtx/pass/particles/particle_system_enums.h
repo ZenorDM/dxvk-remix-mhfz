@@ -27,3 +27,9 @@ enum ParticleBillboardType : uint8_t {
   FaceCamera_Position,        // camera->particle vector
   FaceWorldUp,                // horizontal plane (face up axis)
 };
+// MHFZ start
+enum ParticleSpawnType : uint8_t {
+  Sphere = 0,
+  Box,
+};
+// MHFZ end

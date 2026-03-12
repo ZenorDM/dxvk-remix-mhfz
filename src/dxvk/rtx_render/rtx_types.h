@@ -403,6 +403,15 @@ struct DrawCallTransforms {
   TexGenMode texgenMode = TexGenMode::None;
   const std::vector<Matrix4>* instancesToObject = nullptr;
 
+  // MHFZ start
+  XXH64_hash_t calcHash() const {
+    XXH64_hash_t h = 0;
+    h = XXH64(&objectToWorld, sizeof(objectToWorld), h);
+    h = XXH64(&textureTransform, sizeof(textureTransform), h);
+    return h;
+  }
+  // MHFZ end
+
   void sanitize() {
     if (objectToWorld[3][3] == 0.f) objectToWorld[3][3] = 1.f;
     if (objectToView[3][3] == 0.f) objectToView[3][3] = 1.f;

@@ -32,10 +32,24 @@
 #include "../util/util_globaltime.h"
 
 #include <rtx_shaders/particle_system_spawn.h>
+// MHFZ start
+#include <rtx_shaders/particle_system_spawn_area.h>
+// MHFZ end
 #include <rtx_shaders/particle_system_evolve.h>
 #include <rtx_shaders/particle_system_generate_geometry.h>
 #include "math.h"
 
+// MHFZ start
+#include "rtx_asset_data_manager.h"
+#include "rtx_texture_manager.h"
+
+#include "../../lssusd/usd_include_begin.h"
+#include <pxr/usd/usd/stage.h>
+#include <pxr/usd/usd/attribute.h>
+#include "../../lssusd/usd_include_end.h"
+
+using namespace pxr;
+// MHFZ end
 
 namespace dxvk {
 
@@ -52,12 +66,29 @@ namespace dxvk {
 
         CONSTANT_BUFFER(PARTICLE_SYSTEM_BINDING_CONSTANTS)
 
-        STRUCTURED_BUFFER(PARTICLE_SYSTEM_BINDING_SPAWN_CONTEXT_PARTICLE_MAPPING_INPUT)
         STRUCTURED_BUFFER(PARTICLE_SYSTEM_BINDING_SPAWN_CONTEXTS_INPUT)
 
         RW_STRUCTURED_BUFFER(PARTICLE_SYSTEM_BINDING_PARTICLES_BUFFER_INPUT_OUTPUT)
         END_PARAMETER()
     };
+
+    // MHFZ start
+    class ParticleSystemSpawnArea : public ManagedShader {
+
+
+      SHADER_SOURCE(ParticleSystemSpawnArea, VK_SHADER_STAGE_COMPUTE_BIT, particle_system_spawn_area)
+        BINDLESS_ENABLED()
+        BEGIN_PARAMETER()
+        COMMON_RAYTRACING_BINDINGS
+
+        CONSTANT_BUFFER(PARTICLE_SYSTEM_BINDING_CONSTANTS)
+
+        STRUCTURED_BUFFER(PARTICLE_SYSTEM_BINDING_SPAWN_CONTEXTS_INPUT)
+
+        RW_STRUCTURED_BUFFER(PARTICLE_SYSTEM_BINDING_PARTICLES_BUFFER_INPUT_OUTPUT)
+        END_PARAMETER()
+    };
+    // MHFZ end
 
     class ParticleSystemEvolve : public ManagedShader {
 
@@ -143,7 +174,6 @@ namespace dxvk {
     cachedTotal += cpuSpawns;
 
     // safety checks to ensure things working as expected
-    assert(cachedTotal >= 0);
     assert(cachedTotal <= m_upperBound);
 
     // clear out the GPU buffer to ready for current frame of simulation data
@@ -170,74 +200,43 @@ namespace dxvk {
       ImGui::DragFloat("Time Scale", &timeScaleObject(), 0.01f, 0.f, 1.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
 
       if (ImGui::CollapsingHeader("Global Preset", ImGuiTreeNodeFlags_CollapsingHeader)) {
-        ImGui::TextWrapped("The following settings will be applied to all particle systems created using the texture tagging mechanism.  Particle systems created via USD assets are not affected by these.");
-        ImGui::Separator();
-
-        ImGui::DragInt("Number of Particles Per Material", &numberOfParticlesPerMaterialObject(), 0.1f, 1, 10000000, "%d", ImGuiSliderFlags_AlwaysClamp);
-        const auto colourPickerOpts = ImGuiColorEditFlags_NoOptions | ImGuiColorEditFlags_NoSidePreview | ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_Float | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_DisplayRGB;
-        if (ImGui::CollapsingHeader("Spawn", ImGuiTreeNodeFlags_CollapsingHeader | ImGuiTreeNodeFlags_DefaultOpen)) {
-          ImGui::PushID("spawn");
-          ImGui::DragInt("Spawn Rate Per Second", &spawnRatePerSecondObject(), 0.1f, 1, 100000, "%d", ImGuiSliderFlags_AlwaysClamp);
-          ImGui::Separator();
-          ImGui::Checkbox("Use Spawn Texture Coordinates", &useSpawnTexcoordsObject());
-          ImGui::Separator();
-          ImGui::DragFloat("Initial Velocity From Motion", &initialVelocityFromMotionObject(), 0.01f, -5000.f, 5000.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-          ImGui::DragFloat("Initial Velocity From Normal", &initialVelocityFromNormalObject(), 0.01f, -5000.f, 5000.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-          ImGui::DragFloat("Initial Velocity Cone Angle", &initialVelocityConeAngleDegreesObject(), 0.01f, -5000.f, 5000.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-          ImGui::Separator();
-          ImGui::DragFloatRange("Time to Live Range", { &minParticleLifeObject(), &maxParticleLifeObject() }, 0.01f, 0.01f, 100.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-          ImGui::Separator();
-          ImGui::DragFloatRange("Size Range", { &minSpawnSizeObject(), &maxSpawnSizeObject() }, 0.01f, 0.01f, 100.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-          ImGui::DragFloatRange("Rotation Speed Range", { &minSpawnRotationSpeedObject(), &maxSpawnRotationSpeedObject() }, 0.01f, -100.0f, 100.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-          ImGui::ColorPicker4("Minimum Color Tint", &minSpawnColorObject(), colourPickerOpts);
-          ImGui::ColorPicker4("Maximum Color Tint", &maxSpawnColorObject(), colourPickerOpts);
-          ImGui::PopID();
-        }
-
-        if (ImGui::CollapsingHeader("Target", ImGuiTreeNodeFlags_CollapsingHeader | ImGuiTreeNodeFlags_DefaultOpen)) {
-          ImGui::PushID("target");
-          ImGui::DragFloatRange("Size Range", { &minTargetSizeObject(), &maxTargetSizeObject() }, 0.01f, 0.01f, 100.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-          ImGui::DragFloatRange("Rotation Speed Range", { &minTargetRotationSpeedObject(), &maxTargetRotationSpeedObject() }, 0.01f, -100.0f, 100.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-          ImGui::ColorPicker4("Minimum Color Tint", &minTargetColorObject(), colourPickerOpts);
-          ImGui::ColorPicker4("Maximum Color Tint", &maxTargetColorObject(), colourPickerOpts);
-          ImGui::PopID();
-        }
-
-        if (ImGui::CollapsingHeader("Simulation", ImGuiTreeNodeFlags_CollapsingHeader | ImGuiTreeNodeFlags_DefaultOpen)) {
-          ImGui::DragFloat("Gravity Force", &gravityForceObject(), 0.01f, -1000.f, 1000.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-          ImGui::DragFloat("Max Speed", &maxSpeedObject(), 0.01f, 0.f, 100000.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-
-          ImGui::Checkbox("Enable Particle World Collisions", &enableCollisionDetectionObject());
-          ImGui::BeginDisabled(!enableCollisionDetection());
-          ImGui::DragFloat("Collision Restitution", &collisionRestitutionObject(), 0.01f, 0.f, 1.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-          ImGui::DragFloat("Collision Thickness", &collisionThicknessObject(), 0.01f, 0.f, 10000.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-          ImGui::EndDisabled();
-
-          ImGui::Checkbox("Simulate Turbulence", &useTurbulenceObject());
-          ImGui::BeginDisabled(!useTurbulence());
-          ImGui::DragFloat("Turbulence Force", &turbulenceForceObject(), 0.01f, 0.f, 1000.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-          ImGui::DragFloat("Turbulence Frequency", &turbulenceFrequencyObject(), 0.01f, 0.f, 10.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-          ImGui::EndDisabled();
-        }
-
-        if (ImGui::CollapsingHeader("Visual", ImGuiTreeNodeFlags_CollapsingHeader | ImGuiTreeNodeFlags_DefaultOpen)) {
-          ImGui::Checkbox("Align Particles with Velocity", &alignParticlesToVelocityObject());
-          ImGui::Checkbox("Enable Motion Trail", &enableMotionTrailObject());
-          ImGui::BeginDisabled(!enableMotionTrail());
-          ImGui::DragFloat("Motion Trail Length Multiplier", &motionTrailMultiplierObject(), 0.01f, 0.001f, 10000.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-          ImGui::EndDisabled();
-
-          static auto billboardTypeCombo = ImGui::ComboWithKey<ParticleBillboardType>(
-            "Sky Auto-Detect",
-            ImGui::ComboWithKey<ParticleBillboardType>::ComboEntries { {
-              {ParticleBillboardType::FaceCamera_Spherical, "Classic billboard"},
-              {ParticleBillboardType::FaceCamera_UpAxisLocked, "Cylindrical billboard (fix up axis)"},
-              {ParticleBillboardType::FaceWorldUp, "Horizontal plane (face up axis)"},
-              {ParticleBillboardType::FaceCamera_Position, "Face camera position"},
-          } });
-          billboardTypeCombo.getKey(&billboardTypeObject());
-
-        }
+        // MHFZ start
+        RtxParticleSystemDesc desc = RtxParticleSystemManager::createGlobalParticleSystemDesc();
+        showImguiSettings(desc);
+        RtxParticleSystemManager::initialVelocityFromMotionRef() = desc.initialVelocityFromMotion;
+        RtxParticleSystemManager::initialVelocityFromNormalRef() = desc.initialVelocityFromNormal;
+        RtxParticleSystemManager::initialVelocityConeAngleDegreesRef() = desc.initialVelocityConeAngleDegrees;
+        RtxParticleSystemManager::alignParticlesToVelocityRef() = desc.alignParticlesToVelocity;
+        RtxParticleSystemManager::gravityForceRef() = desc.gravityForce;
+        RtxParticleSystemManager::maxSpeedRef() = desc.maxSpeed;
+        RtxParticleSystemManager::useTurbulenceRef() = desc.useTurbulence ? 1 : 0;
+        RtxParticleSystemManager::turbulenceFrequencyRef() = desc.turbulenceFrequency;
+        RtxParticleSystemManager::turbulenceForceRef() = desc.turbulenceForce;
+        RtxParticleSystemManager::minParticleLifeRef() = desc.minTtl;
+        RtxParticleSystemManager::maxParticleLifeRef() = desc.maxTtl;
+        RtxParticleSystemManager::minSpawnSizeRef() = desc.minSpawnSize;
+        RtxParticleSystemManager::maxSpawnSizeRef() = desc.maxSpawnSize;
+        RtxParticleSystemManager::numberOfParticlesPerMaterialRef() = desc.maxNumParticles;
+        RtxParticleSystemManager::minSpawnColorRef() = Vector4(desc.minSpawnColor.x, desc.minSpawnColor.y, desc.minSpawnColor.z, desc.minSpawnColor.w);
+        RtxParticleSystemManager::maxSpawnColorRef() = Vector4(desc.maxSpawnColor.x, desc.maxSpawnColor.y, desc.maxSpawnColor.z, desc.maxSpawnColor.w);
+        RtxParticleSystemManager::minSpawnRotationSpeedRef() = desc.minSpawnRotationSpeed;
+        RtxParticleSystemManager::maxSpawnRotationSpeedRef() = desc.maxSpawnRotationSpeed;
+        RtxParticleSystemManager::useSpawnTexcoordsRef() = desc.useSpawnTexcoords ? 1 : 0;
+        RtxParticleSystemManager::enableCollisionDetectionRef() = desc.enableCollisionDetection ? 1 : 0;
+        RtxParticleSystemManager::alignParticlesToVelocityRef() = desc.alignParticlesToVelocity ? 1 : 0;
+        RtxParticleSystemManager::collisionRestitutionRef() = desc.collisionRestitution;
+        RtxParticleSystemManager::collisionThicknessRef() = desc.collisionThickness;
+        RtxParticleSystemManager::enableMotionTrailRef() = desc.enableMotionTrail  ? 1 : 0;
+        RtxParticleSystemManager::motionTrailMultiplierRef() = desc.motionTrailMultiplier;
+        RtxParticleSystemManager::spawnRatePerSecondRef() = (int)desc.spawnRate;
+        RtxParticleSystemManager::minTargetSizeRef() = desc.minTargetSize;
+        RtxParticleSystemManager::maxTargetSizeRef() = desc.maxTargetSize;
+        RtxParticleSystemManager::minTargetRotationSpeedRef() = desc.minTargetRotationSpeed;
+        RtxParticleSystemManager::maxTargetRotationSpeedRef() = desc.maxTargetRotationSpeed;
+        RtxParticleSystemManager::minTargetColorRef() = Vector4(desc.minTargetColor.x, desc.minTargetColor.y, desc.minTargetColor.z, desc.minTargetColor.w);
+        RtxParticleSystemManager::maxTargetColorRef() = Vector4(desc.maxTargetColor.x, desc.maxTargetColor.y, desc.maxTargetColor.z, desc.maxTargetColor.w);
+        RtxParticleSystemManager::billboardTypeRef() = desc.billboardType;
+        // MHFZ end
       }
       ImGui::Unindent();
       ImGui::EndDisabled();
@@ -245,6 +244,134 @@ namespace dxvk {
     }
   }
 
+  // MHFZ start : show ParticleDesc, spawn context and material settings
+  bool RtxParticleSystemManager::showImguiSettings(ParticleDataSpawnContext& spawnCtx, RtxParticleSystemDesc& particleDesc, ParticleSystemMaterial& material, const Vector3& cameraPosition) {
+    bool dirty = false;
+    if (ImGui::CollapsingHeader("Particle System", ImGuiTreeNodeFlags_CollapsingHeader)) {
+      ImGui::PushID("rtx_particles");
+      ImGui::Dummy({ 0,2 });
+      ImGui::Indent();
+
+      ImGui::BeginDisabled(!enable());
+
+      if (ImGui::CollapsingHeader("Spawn Context", ImGuiTreeNodeFlags_CollapsingHeader)) {
+
+        static auto spawnTypeCombo = ImGui::ComboWithKey<ParticleSpawnType>(
+        "Spawn Type",
+        ImGui::ComboWithKey<ParticleSpawnType>::ComboEntries { {
+          {ParticleSpawnType::Sphere, "Sphere"},
+          {ParticleSpawnType::Box, "Box"},
+          }});
+        dirty |= spawnTypeCombo.getKey(&spawnCtx.spawnType);
+
+        dirty |= ImGui::SliderFloat("Spawn radius", &spawnCtx.radius, 0.0f, 10000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        dirty |= ImGui::SliderFloat3("Spawn box dimensions", &spawnCtx.boxDim.x, 0.0f, 10000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        dirty |= ImGui::SliderFloat3("Spawn direction", &spawnCtx.spawnDir.x, 0.0f, 10000.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+        if (ImGui::Button("Init particle emitter position at camera pos")) {
+          spawnCtx.emitterWorldPos = cameraPosition;
+          dirty |= true;
+        }
+      }
+
+      dirty |= showImguiSettings(particleDesc);
+
+      if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_CollapsingHeader)) {
+        dirty |= ImGui::DragFloat("Emissive Intesity", &material.emissiveIntensity, 0.01f, 0.001f, 10000.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+        char path[512];
+        strcpy(path, material.m_albedoPath.data());
+        ImGui::InputText("Albedo texture path", path, 512);
+        if (strcmp(material.m_albedoPath.c_str(), path) != 0) {
+          material.m_albedoTexture = nullptr;
+          dirty |= true;
+        }
+        material.m_albedoPath = path;
+      }
+
+      ImGui::Unindent();
+      ImGui::EndDisabled();
+      ImGui::PopID();
+    }
+
+    return dirty;
+  }
+  // MHFZ end
+
+  // MHFZ start : show ParticleDesc settings
+  bool RtxParticleSystemManager::showImguiSettings(RtxParticleSystemDesc& particleDesc) {
+    bool dirty = false;
+    if (ImGui::CollapsingHeader("Particle Desc", ImGuiTreeNodeFlags_CollapsingHeader)) {
+      ImGui::TextWrapped("The following settings will be applied to all particle systems created using the texture tagging mechanism.  Particle systems created via USD assets are not affected by these.");
+      ImGui::Separator();
+
+      dirty |= ImGui::DragInt("Number of Particles Per Material", &particleDesc.maxNumParticles, 0.1f, 1, 10000000, "%d", ImGuiSliderFlags_AlwaysClamp);
+      const auto colourPickerOpts = ImGuiColorEditFlags_NoOptions | ImGuiColorEditFlags_NoSidePreview | ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_Float | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_DisplayRGB;
+      if (ImGui::CollapsingHeader("Spawn", ImGuiTreeNodeFlags_CollapsingHeader)) {
+        ImGui::PushID("spawn");
+        int spawnRate = (int) particleDesc.spawnRate;
+        dirty |= ImGui::DragInt("Spawn Rate Per Second", &spawnRate, 0.1f, 1, 100000, "%d", ImGuiSliderFlags_AlwaysClamp);
+        particleDesc.spawnRate = (float) spawnRate;
+
+        dirty |= ImGui::DragFloat("Initial Velocity From Motion", &particleDesc.initialVelocityFromMotion, 0.01f, -5000.f, 5000.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+        dirty |= ImGui::DragFloat("Initial Velocity From Normal", &particleDesc.initialVelocityFromNormal, 0.01f, -5000.f, 5000.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+        dirty |= ImGui::DragFloat("Initial Velocity Cone Angle", &particleDesc.initialVelocityConeAngleDegrees, 0.01f, -5000.f, 5000.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+        ImGui::Separator();
+        dirty |= ImGui::DragFloatRange("Time to Live Range", { &particleDesc.minTtl, &particleDesc.maxTtl }, 0.01f, 0.01f, 100.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+        ImGui::Separator();
+        dirty |= ImGui::DragFloatRange("Size Range", { &particleDesc.minSpawnSize, &particleDesc.maxSpawnSize }, 0.01f, 0.01f, 5000.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+        dirty |= ImGui::DragFloatRange("Rotation Speed Range", { &particleDesc.minSpawnRotationSpeed, &particleDesc.maxSpawnRotationSpeed }, 0.01f, -100.0f, 100.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+        dirty |= ImGui::ColorEdit4("Minimum Color Tint", &particleDesc.minSpawnColor.x, colourPickerOpts);
+        dirty |= ImGui::ColorEdit4("Maximum Color Tint", &particleDesc.maxSpawnColor.x, colourPickerOpts);
+        ImGui::PopID();
+      }
+
+      if (ImGui::CollapsingHeader("Target", ImGuiTreeNodeFlags_CollapsingHeader)) {
+        ImGui::PushID("target");
+        dirty |= ImGui::DragFloatRange("Size Range", { &particleDesc.minTargetSize, &particleDesc.maxTargetSize }, 0.01f, 0.01f, 5000.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+        dirty |= ImGui::DragFloatRange("Rotation Speed Range", { &particleDesc.minTargetRotationSpeed, &particleDesc.maxTargetRotationSpeed }, 0.01f, -100.0f, 100.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+        dirty |= ImGui::ColorEdit4("Minimum Color Tint", &particleDesc.minTargetColor.x, colourPickerOpts);
+        dirty |= ImGui::ColorEdit4("Maximum Color Tint", &particleDesc.maxTargetColor.x, colourPickerOpts);
+        ImGui::PopID();
+      }
+
+      if (ImGui::CollapsingHeader("Simulation", ImGuiTreeNodeFlags_CollapsingHeader)) {
+        dirty |= ImGui::DragFloat("Gravity Force", &particleDesc.gravityForce, 0.01f, -1000.f, 1000.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+        dirty |= ImGui::DragFloat("Max Speed", &particleDesc.maxSpeed, 0.01f, 0.f, 100000.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+
+        dirty |= ImGui::Checkbox("Enable Particle World Collisions", (bool*) &particleDesc.enableCollisionDetection);
+        ImGui::BeginDisabled(!particleDesc.enableCollisionDetection);
+        dirty |= ImGui::DragFloat("Collision Restitution", &particleDesc.collisionRestitution, 0.01f, 0.f, 1.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+        dirty |= ImGui::DragFloat("Collision Thickness", &particleDesc.collisionThickness, 0.01f, 0.f, 10000.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+        ImGui::EndDisabled();
+
+        dirty |= ImGui::Checkbox("Simulate Turbulence", (bool*) &particleDesc.useTurbulence);
+        ImGui::BeginDisabled(!particleDesc.useTurbulence);
+        dirty |= ImGui::DragFloat("Turbulence Force", &particleDesc.turbulenceForce, 0.01f, 0.f, 1000.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+        dirty |= ImGui::DragFloat("Turbulence Frequency", &particleDesc.turbulenceFrequency, 0.01f, 0.f, 10.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+        ImGui::EndDisabled();
+      }
+
+      if (ImGui::CollapsingHeader("Visual", ImGuiTreeNodeFlags_CollapsingHeader)) {
+        dirty |= ImGui::Checkbox("Align Particles with Velocity", (bool*) &particleDesc.alignParticlesToVelocity);
+        dirty |= ImGui::Checkbox("Enable Motion Trail", (bool*) &particleDesc.enableMotionTrail);
+        ImGui::BeginDisabled(!particleDesc.enableMotionTrail);
+        dirty |= ImGui::DragFloat("Motion Trail Length Multiplier", &particleDesc.motionTrailMultiplier, 0.01f, 0.001f, 10000.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+        ImGui::EndDisabled();
+
+        static auto billboardTypeCombo = ImGui::ComboWithKey<ParticleBillboardType>(
+          "Billboard Type",
+          ImGui::ComboWithKey<ParticleBillboardType>::ComboEntries { {
+            {ParticleBillboardType::FaceCamera_Spherical, "Classic billboard"},
+            {ParticleBillboardType::FaceCamera_UpAxisLocked, "Cylindrical billboard (fix up axis)"},
+            {ParticleBillboardType::FaceWorldUp, "Horizontal plane (face up axis)"},
+            {ParticleBillboardType::FaceCamera_Position, "Face camera position"},
+        } });
+        dirty |= billboardTypeCombo.getKey(&particleDesc.billboardType);
+      }
+    }
+    return dirty;
+  }
+  // MHFZ end
   void RtxParticleSystemManager::setupConstants(RtxContext* ctx, ParticleSystemConstants& constants) {
     ScopedCpuProfileZone();
     const RtCamera& camera = ctx->getSceneManager().getCamera();
@@ -310,17 +437,41 @@ namespace dxvk {
     return desc;
   }
 
-  bool RtxParticleSystemManager::fetchParticleSystem(DxvkContext* ctx, const DrawCallState& drawCallState, const RtxParticleSystemDesc& desc, const MaterialData* overrideMaterial, ParticleSystem** materialSystem) {
+  // MHFZ start : create particle system Material
+  ParticleSystemMaterial RtxParticleSystemManager::createGlobalParticleSystemMaterial() {
+    ParticleSystemMaterial mat;
+    mat.emissiveIntensity = 0.0f;
+    mat.m_albedoPath.reserve(512);
+    return mat;
+  }
+
+  ParticleDataSpawnContext RtxParticleSystemManager::createGlobalParticleSystemSpawnContext() {
+    ParticleDataSpawnContext spawnCtx;
+    spawnCtx.emitterWorldPos = vec3(0.0f, 0.0f, 0.0f);
+    spawnCtx.boxDim = vec3(50.0f, 50.0f, 50.0f);
+    spawnCtx.radius = 50.0f;
+    spawnCtx.spawnDir = vec3(0.0f, 1.0f, 0.0f);
+    spawnCtx.spawnType = ParticleSpawnType::Sphere;
+    return spawnCtx;
+  }
+  // MHFZ end
+
+  bool RtxParticleSystemManager::fetchParticleSystem(DxvkContext* ctx, const DrawCallState& drawCallState, const RtxParticleSystemDesc& desc, const ParticleSystemMaterial& particleMaterial, const MaterialData* overrideMaterial, ParticleSystem** materialSystem, ParticleDataSpawnContext* spawnContext, uint32_t areaPaticleSystemIndex) {
     ScopedCpuProfileZone();
     if(desc.maxNumParticles == 0) {
       return false;
     }
     
-    const XXH64_hash_t particleSystemHash = drawCallState.getMaterialData().getHash() ^ desc.calcHash();
+    // MHFZ start : compute particle hash
+    XXH64_hash_t spawnContextHash = spawnContext ? spawnContext->calcHash() : 0;
+    XXH64_hash_t geoHash = areaPaticleSystemIndex == 255 ? drawCallState.transformData.calcHash() ^ drawCallState.geometryData.getHashForRule<rules::TopologicalHash>() : 0;
+
+    XXH64_hash_t particleSystemHash = drawCallState.getMaterialData().getHash() ^ desc.calcHash() ^ spawnContextHash ^ geoHash ^ particleMaterial.calcHash();
+    // MHFZ end
 
     auto& materialSystemIt = m_particleSystems.find(particleSystemHash);
     if (materialSystemIt == m_particleSystems.end()) {
-      auto pNewParticleSystem = std::make_shared<ParticleSystem>(desc, (overrideMaterial ? *overrideMaterial : drawCallState.getMaterialData()), drawCallState.getCategoryFlags(), m_particleSystemCounter++);
+      auto pNewParticleSystem = std::make_shared<ParticleSystem>(desc, particleMaterial, (overrideMaterial ? *overrideMaterial : drawCallState.getMaterialData()), drawCallState.getCategoryFlags(), m_particleSystemCounter++, spawnContext, areaPaticleSystemIndex);
       pNewParticleSystem->allocStaticBuffers(ctx);
       m_particleSystems.insert({ particleSystemHash, pNewParticleSystem });
     }
@@ -355,7 +506,7 @@ namespace dxvk {
     return numParticles;
   }
 
-  void RtxParticleSystemManager::spawnParticles(DxvkContext* ctx, const RtxParticleSystemDesc& desc, const uint32_t instanceId, const DrawCallState& drawCallState, const MaterialData* overrideMaterial) {
+  void RtxParticleSystemManager::spawnParticles(DxvkContext* ctx, const RtxParticleSystemDesc& desc, ParticleSystemMaterial& particleMaterial, const uint32_t instanceId, const DrawCallState& drawCallState, const MaterialData* overrideMaterial, ParticleDataSpawnContext* particleSpawnCtx, uint32_t areaPaticleSystemIndex) {
     ScopedCpuProfileZone();
     if (!enable() || !enableSpawning()) {
       return;
@@ -363,8 +514,25 @@ namespace dxvk {
 
     m_initialized = true;
 
+    // MHFZ start : load particle albedo if set up
+    if (particleMaterial.m_albedoTexture == nullptr && particleMaterial.m_albedoPath.empty() == false) {
+      wchar_t file_prefix[MAX_PATH] = L"";
+      GetModuleFileNameW(nullptr, file_prefix, ARRAYSIZE(file_prefix));
+      std::filesystem::path texturePath = file_prefix;
+      texturePath = texturePath.parent_path();
+      texturePath = texturePath.parent_path();
+      texturePath /= "PBRData";
+      texturePath /= particleMaterial.m_albedoPath.c_str();
+      if (std::filesystem::exists(texturePath)) {
+        auto assetData = AssetDataManager::get().findAsset(texturePath.string());
+        if (assetData != nullptr) {
+          particleMaterial.m_albedoTexture = ctx->getDevice()->getCommon()->getTextureManager().preloadTextureAsset(assetData, ColorSpace::AUTO, true);
+        }
+      }
+    }
+    // MHFZ end
     ParticleSystem* particleSystem = nullptr;
-    if (!fetchParticleSystem(ctx, drawCallState, desc, overrideMaterial, &particleSystem)) {
+    if (!fetchParticleSystem(ctx, drawCallState, desc, particleMaterial, overrideMaterial, &particleSystem, particleSpawnCtx, areaPaticleSystemIndex)) {
       return;
     }
 
@@ -389,6 +557,11 @@ namespace dxvk {
     spawnCtx.particleOffset = particleSystem->context.particleHeadOffset;
     spawnCtx.instanceId = instanceId;
     spawnCtx.particleSystemHash = particleSystem->getHash();
+    // MHFZ start
+    if (particleSpawnCtx){
+      spawnCtx.context = *particleSpawnCtx;
+    }
+    // MHFZ end
 
     // Update material specific counters
     particleSystem->context.particleHeadOffset += numParticles;
@@ -409,7 +582,6 @@ namespace dxvk {
     if (!enable() || !m_initialized) {
       m_spawnContexts.clear();
       m_particleSystems.clear();
-      m_spawnContextsBuffer = nullptr;
       return;
     }
 
@@ -428,8 +600,6 @@ namespace dxvk {
       Rc<DxvkSampler> valueNoiseSampler = ctx->getResourceManager().getSampler(VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_NEAREST, VK_SAMPLER_ADDRESS_MODE_REPEAT);
       ctx->bindResourceSampler(BINDING_VALUE_NOISE_SAMPLER, valueNoiseSampler);
 
-      ctx->bindResourceBuffer(PARTICLE_SYSTEM_BINDING_SPAWN_CONTEXTS_INPUT, DxvkBufferSlice(m_spawnContextsBuffer));
-
       const auto& rtOutput = ctx->getResourceManager().getRaytracingOutput();
       ctx->bindResourceView(PARTICLE_SYSTEM_BINDING_PREV_WORLD_POSITION_INPUT,
                                   rtOutput.getPreviousPrimaryWorldPositionWorldTriangleNormal().view(Resources::AccessType::Read,
@@ -441,6 +611,9 @@ namespace dxvk {
 
         GpuParticleSystem& particleSystem = system.second->context;
 
+        // MHFZ start : use by default player pos as targetPos
+        particleSystem.desc.targetPos = ctx->getDevice()->getAreaManager().getPlayerPos();
+        // MHFZ end
 
         const bool isNumParticlesConstant = particleSystem.desc.spawnRate >= particleSystem.desc.maxNumParticles;
 
@@ -491,11 +664,19 @@ namespace dxvk {
         if (particleSystem.spawnParticleCount > 0) {
           const VkExtent3D workgroups = util::computeBlockCount(VkExtent3D { particleSystem.spawnParticleCount, 1, 1 }, VkExtent3D { 128, 1, 1 });
 
-          ctx->bindResourceBuffer(PARTICLE_SYSTEM_BINDING_SPAWN_CONTEXTS_INPUT, DxvkBufferSlice(m_spawnContextsBuffer));
-          ctx->bindResourceBuffer(PARTICLE_SYSTEM_BINDING_SPAWN_CONTEXT_PARTICLE_MAPPING_INPUT, DxvkBufferSlice(system.second->getSpawnContextMappingBuffer()));
+          // MHFZ start
+          ctx->bindResourceBuffer(PARTICLE_SYSTEM_BINDING_SPAWN_CONTEXTS_INPUT, DxvkBufferSlice(system.second->getSpawnGpuContextBuffer()));
+          // MHFZ end
           ctx->bindResourceBuffer(PARTICLE_SYSTEM_BINDING_PARTICLES_BUFFER_INPUT_OUTPUT, DxvkBufferSlice(system.second->getParticlesBuffer()));
-
-          ctx->bindShader(VK_SHADER_STAGE_COMPUTE_BIT, ParticleSystemSpawn::getShader());
+          
+          // MHFZ start : bind correct spawn shader
+          if (system.second->areaSystem) {
+            ctx->bindShader(VK_SHADER_STAGE_COMPUTE_BIT, ParticleSystemSpawnArea::getShader());
+          }
+          else {
+            ctx->bindShader(VK_SHADER_STAGE_COMPUTE_BIT, ParticleSystemSpawn::getShader());
+          }
+          // MHFZ end
 
           ctx->dispatch(workgroups.width, workgroups.height, workgroups.depth);
         }
@@ -541,46 +722,66 @@ namespace dxvk {
     }
 
     // Align the data
-    std::vector<GpuSpawnContext> gpuSpawnContexts(m_spawnContexts.size());
-    for (auto& spawnCtxIt = m_spawnContexts.begin(); spawnCtxIt != m_spawnContexts.end(); spawnCtxIt++) {
-      const SpawnContext& spawnCtx = *spawnCtxIt;
-      const uint32_t contextIdx = spawnCtxIt - m_spawnContexts.begin();
-      GpuSpawnContext& gpuCtx = gpuSpawnContexts[contextIdx];
+    for (auto& keyPair : m_particleSystems) {
+      ParticleSystem& particleSystem = *(keyPair.second.get());
+      if (particleSystem.spawnContextParticleMap.size() == 0)
+        continue;
+      uint32_t spawnCtxIt = *particleSystem.spawnContextParticleMap.begin();
+      if (spawnCtxIt >= m_spawnContexts.size())
+        continue;
+      const SpawnContext& spawnCtx = m_spawnContexts[spawnCtxIt];
+
+      GpuSpawnContext gpuCtx;
 
       const RtInstance* pTargetInstance = spawnCtx.instanceId < ctx->getSceneManager().getInstanceTable().size() ? ctx->getSceneManager().getInstanceTable()[spawnCtx.instanceId] : nullptr;
 
-      if (pTargetInstance == nullptr) {
+      if (pTargetInstance == nullptr && particleSystem.areaSystem == false) {
         // I dont see this case being hit, but in theory it could happen since we track the 
         //   instance ID at draw time, and the instance list can change over the course of a frame.
         //   In the event it does happen, handle gracefully...dw
         memset(&gpuCtx, 0, sizeof(GpuSpawnContext));
-        m_particleSystems[spawnCtx.particleSystemHash]->context.spawnParticleCount = 0;
+        particleSystem.context.spawnParticleCount = 0;
         continue;
       }
+      // MHFZ start :  area particle send cutom spawn settings
+      if (particleSystem.areaSystem == false) {
+        gpuCtx.spawnObjectToWorld = pTargetInstance->getTransform();
+        gpuCtx.spawnPrevObjectToWorld = pTargetInstance->getPrevTransform();
 
-      gpuCtx.spawnObjectToWorld = pTargetInstance->getTransform();
-      gpuCtx.spawnPrevObjectToWorld = pTargetInstance->getPrevTransform();
+        gpuCtx.indices32bit = pTargetInstance->getBlas()->modifiedGeometryData.indexBuffer.indexType() == VK_INDEX_TYPE_UINT32 ? 1 : 0;
+        gpuCtx.numTriangles = pTargetInstance->getBlas()->modifiedGeometryData.indexCount / 3;
+        gpuCtx.spawnMeshIndexIdx = pTargetInstance->surface.indexBufferIndex;
+        gpuCtx.spawnMeshPositionsIdx = pTargetInstance->surface.positionBufferIndex;
+        gpuCtx.spawnMeshPrevPositionsIdx = pTargetInstance->surface.previousPositionBufferIndex;
 
-      gpuCtx.indices32bit = pTargetInstance->getBlas()->modifiedGeometryData.indexBuffer.indexType() == VK_INDEX_TYPE_UINT32 ? 1 : 0;
-      gpuCtx.numTriangles = pTargetInstance->getBlas()->modifiedGeometryData.indexCount / 3;
-      gpuCtx.spawnMeshIndexIdx = pTargetInstance->surface.indexBufferIndex;
-      gpuCtx.spawnMeshPositionsIdx = pTargetInstance->surface.positionBufferIndex;
-      gpuCtx.spawnMeshPrevPositionsIdx = pTargetInstance->surface.previousPositionBufferIndex;
+        gpuCtx.spawnMeshColorsIdx = pTargetInstance->surface.color0BufferIndex;
+        gpuCtx.spawnMeshTexcoordsIdx = pTargetInstance->surface.texcoordBufferIndex;
+        gpuCtx.spawnMeshPositionsOffset = pTargetInstance->surface.positionOffset;
+        gpuCtx.spawnMeshPositionsStride = pTargetInstance->surface.positionStride;
 
-      gpuCtx.spawnMeshColorsIdx = pTargetInstance->surface.color0BufferIndex;
-      gpuCtx.spawnMeshTexcoordsIdx = pTargetInstance->surface.texcoordBufferIndex;
-      gpuCtx.spawnMeshPositionsOffset = pTargetInstance->surface.positionOffset;
-      gpuCtx.spawnMeshPositionsStride = pTargetInstance->surface.positionStride;
+        gpuCtx.spawnMeshColorsOffset = pTargetInstance->surface.color0Offset;
+        gpuCtx.spawnMeshColorsStride = pTargetInstance->surface.color0Stride;
+        gpuCtx.spawnMeshTexcoordsOffset = pTargetInstance->surface.texcoordOffset;
+        gpuCtx.spawnMeshTexcoordsStride = pTargetInstance->surface.texcoordStride;
+      }
+      else {
+        Matrix4 m;
+        m[0][3] = spawnCtx.context.emitterWorldPos.x;
+        m[1][3] = spawnCtx.context.emitterWorldPos.y;
+        m[2][3] = spawnCtx.context.emitterWorldPos.z;
+        gpuCtx.spawnObjectToWorld = transpose(dxvk::Matrix4(m));
+        gpuCtx.radius = spawnCtx.context.radius;
+        gpuCtx.boxDim = spawnCtx.context.boxDim;
+        gpuCtx.spawnType = spawnCtx.context.spawnType;
+       
+      }
+      gpuCtx.spawnDir = spawnCtx.context.spawnDir;
+      ctx->writeToBuffer(particleSystem.getSpawnGpuContextBuffer(), 0, sizeof(GpuSpawnContext), &gpuCtx);
 
-      gpuCtx.spawnMeshColorsOffset = pTargetInstance->surface.color0Offset;
-      gpuCtx.spawnMeshColorsStride = pTargetInstance->surface.color0Stride;
-      gpuCtx.spawnMeshTexcoordsOffset = pTargetInstance->surface.texcoordOffset;
-      gpuCtx.spawnMeshTexcoordsStride = pTargetInstance->surface.texcoordStride;
     }
+    // MHFZ end
 
     // Send data to GPU
-
-    ctx->writeToBuffer(m_spawnContextsBuffer, 0, gpuSpawnContexts.size() * sizeof(GpuSpawnContext), gpuSpawnContexts.data());
 
     for (const auto& keyPair : m_particleSystems) {
       const ParticleSystem& particleSystem = *(keyPair.second.get());
@@ -588,9 +789,6 @@ namespace dxvk {
         assert(particleSystem.context.spawnParticleCount == 0);
         continue;
       }
-
-      const std::vector<uint16_t>& particleSpawnMap = particleSystem.spawnContextParticleMap;
-      ctx->writeToBuffer(particleSystem.getSpawnContextMappingBuffer(), 0, particleSpawnMap.size() * sizeof(uint16_t), particleSpawnMap.data());
     }
   }
 
@@ -639,6 +837,9 @@ namespace dxvk {
       newDrawCallState.categories = particleSystem.categories;
       newDrawCallState.categories.set(InstanceCategories::Particle);
       newDrawCallState.categories.clr(InstanceCategories::ParticleEmitter);
+      // MHFZ start
+      newDrawCallState.categories.clr(InstanceCategories::CustomBlend);
+      // MHFZ end
       newDrawCallState.categories.clr(InstanceCategories::Hidden);
       newDrawCallState.transformData.viewToProjection = camera.getViewToProjection();
       newDrawCallState.transformData.worldToView = camera.getWorldToView();
@@ -646,24 +847,56 @@ namespace dxvk {
       // If we have legacy material data, lets use it, otherwise default.
       if (particleSystem.materialData.getType() == MaterialDataType::Legacy) {
         newDrawCallState.materialData = particleSystem.materialData.getLegacyMaterialData();
+        // MHFZ start : use particle material emissive
+        newDrawCallState.materialData.emissiveIntensity = particleSystem.particleMaterial.emissiveIntensity;
+        // MHFZ end
       }
-      newDrawCallState.materialData.alphaBlendEnabled = true;
+      newDrawCallState.materialData.alphaBlendEnabled = true; 
       // We want to always have particles support vertex colour for now.
       newDrawCallState.materialData.textureColorArg2Source = RtTextureArgSource::VertexColor0;
+
+      // MHFZ start : use particle material albedo
+      TextureRef albedo;
+
+      if (particleSystem.particleMaterial.m_albedoPath.empty() == false) {
+        if (particleSystem.particleMaterial.m_albedoTexture != nullptr) {
+          albedo = TextureRef(particleSystem.particleMaterial.m_albedoTexture);
+          newDrawCallState.materialData.alphaTestEnabled = false;
+          newDrawCallState.materialData.alphaTestReferenceValue = 0;
+          newDrawCallState.materialData.alphaTestCompareOp = VkCompareOp::VK_COMPARE_OP_ALWAYS;
+          newDrawCallState.materialData.colorBlendOp = VkBlendOp::VK_BLEND_OP_ADD;
+          newDrawCallState.materialData.srcColorBlendFactor = VkBlendFactor::VK_BLEND_FACTOR_SRC_ALPHA;
+          newDrawCallState.materialData.dstColorBlendFactor = VkBlendFactor::VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+          newDrawCallState.materialData.colorTextures[1] = albedo;
+          newDrawCallState.materialData.isTextureFactorBlend = true;
+          newDrawCallState.materialData.textureAlphaArg1Source = RtTextureArgSource::Texture;
+          newDrawCallState.materialData.textureAlphaOperation = DxvkRtTextureOperation::SelectArg1;
+          newDrawCallState.materialData.updateCachedHash();
+        }
+
+      }
+      else {
+        albedo = newDrawCallState.materialData.getColorTexture();
+      }
+      // MHFZ end
 
       ctx->getSceneManager().submitDrawState(ctx, newDrawCallState, (particleSystem.materialData.getType() == MaterialDataType::Legacy) ? nullptr : &particleSystem.materialData);
     }
   }
 
-  RtxParticleSystemManager::ParticleSystem::ParticleSystem(const RtxParticleSystemDesc& desc, const MaterialData& matData, const CategoryFlags& cats, const uint32_t seed) : context(desc)
+  RtxParticleSystemManager::ParticleSystem::ParticleSystem(const RtxParticleSystemDesc& desc, const ParticleSystemMaterial& particleMaterial, const MaterialData& matData, const CategoryFlags& cats, const uint32_t seed, ParticleDataSpawnContext* spawnContext, uint32_t areaPaticleSystemIndex) : context(desc)
     , materialData(matData)
+    , particleMaterial(particleMaterial)
     , categories(cats) 
+    , areaSystem(areaPaticleSystemIndex != 255)
     , lastSpawnTimeMs(GlobalTime::get().absoluteTimeMs()) {
     // Seed the RNG with a parameter from the manager, so we get unique random values for each particle system
     generator = std::default_random_engine(seed);
     // Store this hash since it cannot change now.
     // NOTE: This material data hash is stable within a run, but since hash depends on VK handles, it is not reliable across runs.
-    m_cachedHash = materialData.getHash() ^ context.desc.calcHash();
+    XXH64_hash_t areaParticleSpawnContextHash = spawnContext ? spawnContext->calcHash() : 0;
+    m_cachedHash = materialData.getHash() ^ context.desc.calcHash() ^ areaParticleSpawnContextHash ^ particleMaterial.calcHash();
+    
     context.numVerticesPerParticle = getVerticesPerParticle();
 
     // classic square billboard
@@ -784,18 +1017,19 @@ namespace dxvk {
       ctx->writeToBuffer(m_ib, 0, info.size, indices.data());
     }
 
-    if (m_spawnContextParticleMapBuffer == nullptr || m_spawnContextParticleMapBuffer->info().size != sizeof(uint16_t) * context.desc.maxNumParticles) {
+    if (m_spawnGpuContext == nullptr) {
+      const Rc<DxvkDevice>& device = ctx->getDevice();
 
       DxvkBufferCreateInfo info;
-      info.size = sizeof(uint16_t) * context.desc.maxNumParticles;
+      info.size = sizeof(GpuSpawnContext);
       info.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
         | VK_BUFFER_USAGE_TRANSFER_DST_BIT
         | VK_BUFFER_USAGE_TRANSFER_SRC_BIT
         | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
-      info.stages = VK_PIPELINE_STAGE_TRANSFER_BIT;
-      info.access = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
-      m_spawnContextParticleMapBuffer = device->createBuffer(info, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, DxvkMemoryStats::Category::RTXBuffer, "RTX Particles - Spawn Context Map Buffer");
-      ctx->clearBuffer(m_spawnContextParticleMapBuffer, 0, info.size, 0);
+      info.stages = VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+      info.access = VK_ACCESS_TRANSFER_WRITE_BIT
+        | VK_ACCESS_TRANSFER_READ_BIT;
+      m_spawnGpuContext = device->createBuffer(info, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, DxvkMemoryStats::Category::RTXBuffer, "RTX Particles - Spawn Context Buffer");
     }
   }
 
@@ -812,20 +1046,7 @@ namespace dxvk {
       m_cb = device->createBuffer(info, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, DxvkMemoryStats::Category::RTXBuffer, "RTX Particles - Constant Buffer");
     }
 
-    if (m_spawnContextsBuffer == nullptr || m_spawnContextsBuffer->info().size < sizeof(GpuSpawnContext) * std::max(100u, (uint32_t) m_spawnContexts.size())) {
-      const Rc<DxvkDevice>& device = ctx->getDevice();
 
-      DxvkBufferCreateInfo info;
-      info.size = sizeof(GpuSpawnContext) * std::max(100u, (uint32_t) m_spawnContexts.size());
-      info.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
-        | VK_BUFFER_USAGE_TRANSFER_DST_BIT
-        | VK_BUFFER_USAGE_TRANSFER_SRC_BIT
-        | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
-      info.stages = VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
-      info.access = VK_ACCESS_TRANSFER_WRITE_BIT
-        | VK_ACCESS_TRANSFER_READ_BIT;
-      m_spawnContextsBuffer = device->createBuffer(info, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, DxvkMemoryStats::Category::RTXBuffer, "RTX Particles - Spawn Context Buffer");
-    }
   }
 
   void RtxParticleSystemManager::prepareForNextFrame() {
@@ -861,4 +1082,425 @@ namespace dxvk {
     }
   }
 
+  // MHFZ start : save/load particle system
+  void RtxParticleSystemManager::save(std::string path, UsdStageRefPtr stage, const RtxParticleSystemDesc& desc, const ParticleSystemMaterial& particleMaterial, const ParticleDataSpawnContext& spawnContext)  {
+    {
+      UsdPrim particleSpawnPrim = stage->DefinePrim(SdfPath { path + "/ParticleSpawnContext" });
+      auto emitterWorldPosAttr = particleSpawnPrim.CreateAttribute(
+      TfToken("emitterWorldPos"),
+      SdfValueTypeNames->Color3f,
+      true
+      );
+      emitterWorldPosAttr.Set(GfVec3f(spawnContext.emitterWorldPos.x, spawnContext.emitterWorldPos.y, spawnContext.emitterWorldPos.z));
+
+      auto boxDimAttr = particleSpawnPrim.CreateAttribute(
+      TfToken("boxDim"),
+      SdfValueTypeNames->Color3f,
+      true
+      );
+      boxDimAttr.Set(GfVec3f(spawnContext.boxDim.x, spawnContext.boxDim.y, spawnContext.boxDim.z));
+
+      auto spawnDirAttr = particleSpawnPrim.CreateAttribute(
+      TfToken("spawnDir"),
+      SdfValueTypeNames->Color3f,
+      true
+      );
+      spawnDirAttr.Set(GfVec3f(spawnContext.spawnDir.x, spawnContext.spawnDir.y, spawnContext.spawnDir.z));
+
+      auto radiusAttr = particleSpawnPrim.CreateAttribute(
+      TfToken("radius"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      radiusAttr.Set(spawnContext.radius);
+
+      auto spawnTypeAttr = particleSpawnPrim.CreateAttribute(
+      TfToken("spawnType"),
+      SdfValueTypeNames->UInt,
+      true
+      );
+      spawnTypeAttr.Set((uint32_t) spawnContext.spawnType);
+    }
+    {
+      UsdPrim particleDesc = stage->DefinePrim(SdfPath { path + "/ParticleDescriptor" });
+      auto minSpawnColorAttr = particleDesc.CreateAttribute(
+      TfToken("minSpawnColor"),
+      SdfValueTypeNames->Color4f,
+      true
+      );
+      minSpawnColorAttr.Set(GfVec4f(desc.minSpawnColor.x, desc.minSpawnColor.y, desc.minSpawnColor.z, desc.minSpawnColor.w));
+
+      auto maxSpawnColorAttr = particleDesc.CreateAttribute(
+      TfToken("maxSpawnColor"),
+      SdfValueTypeNames->Color4f,
+      true
+      );
+      maxSpawnColorAttr.Set(GfVec4f(desc.maxSpawnColor.x, desc.maxSpawnColor.y, desc.maxSpawnColor.z, desc.maxSpawnColor.w));
+
+      auto minTargetColorAttr = particleDesc.CreateAttribute(
+      TfToken("minTargetColor"),
+      SdfValueTypeNames->Color4f,
+      true
+      );
+      minTargetColorAttr.Set(GfVec4f(desc.minTargetColor.x, desc.minTargetColor.y, desc.minTargetColor.z, desc.minTargetColor.w));
+      
+      auto maxTargetColorAttr = particleDesc.CreateAttribute(
+      TfToken("maxTargetColor"),
+      SdfValueTypeNames->Color4f,
+      true
+      );
+      maxTargetColorAttr.Set(GfVec4f(desc.maxTargetColor.x, desc.maxTargetColor.y, desc.maxTargetColor.z, desc.maxTargetColor.w));
+
+      auto minTargetSizeAttr = particleDesc.CreateAttribute(
+      TfToken("minTargetSize"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      minTargetSizeAttr.Set(desc.minTargetSize);
+
+      auto maxTargetSizeAttr = particleDesc.CreateAttribute(
+      TfToken("maxTargetSize"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      maxTargetSizeAttr.Set(desc.maxTargetSize);
+
+      auto minTargetRotationSpeedAttr = particleDesc.CreateAttribute(
+      TfToken("minTargetRotationSpeed"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      minTargetRotationSpeedAttr.Set(desc.minTargetRotationSpeed);
+
+      auto maxTargetRotationSpeedAttr = particleDesc.CreateAttribute(
+      TfToken("maxTargetRotationSpeed"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      maxTargetRotationSpeedAttr.Set(desc.maxTargetRotationSpeed);
+
+      auto minTtlAttr = particleDesc.CreateAttribute(
+      TfToken("minTtl"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      minTtlAttr.Set(desc.minTtl);
+
+      auto maxTtlAttr = particleDesc.CreateAttribute(
+      TfToken("maxTtl"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      maxTtlAttr.Set(desc.maxTtl);
+
+      auto initialVelocityFromNormalAttr = particleDesc.CreateAttribute(
+      TfToken("initialVelocityFromNormal"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      initialVelocityFromNormalAttr.Set(desc.initialVelocityFromNormal);
+
+      auto initialVelocityConeAngleDegreesAttr = particleDesc.CreateAttribute(
+      TfToken("initialVelocityConeAngleDegrees"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      initialVelocityConeAngleDegreesAttr.Set(desc.initialVelocityConeAngleDegrees);
+
+      auto minSpawnSizeAttr = particleDesc.CreateAttribute(
+      TfToken("minSpawnSize"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      minSpawnSizeAttr.Set(desc.minSpawnSize);
+
+      auto maxSpawnSizeAttr = particleDesc.CreateAttribute(
+      TfToken("maxSpawnSize"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      maxSpawnSizeAttr.Set(desc.maxSpawnSize);
+
+      auto gravityForceAttr = particleDesc.CreateAttribute(
+      TfToken("gravityForce"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      gravityForceAttr.Set(desc.gravityForce);
+
+      auto maxSpeedAttr = particleDesc.CreateAttribute(
+      TfToken("maxSpeed"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      maxSpeedAttr.Set(desc.maxSpeed);
+
+      auto turbulenceFrequencyAttr = particleDesc.CreateAttribute(
+      TfToken("turbulenceFrequency"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      turbulenceFrequencyAttr.Set(desc.turbulenceFrequency);
+
+      auto turbulenceForceAttr = particleDesc.CreateAttribute(
+      TfToken("turbulenceForce"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      turbulenceForceAttr.Set(desc.turbulenceForce);
+
+      auto motionTrailMultiplierAttr = particleDesc.CreateAttribute(
+      TfToken("motionTrailMultiplier"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      motionTrailMultiplierAttr.Set(desc.motionTrailMultiplier);
+
+      auto minSpawnRotationSpeedAttr = particleDesc.CreateAttribute(
+      TfToken("minSpawnRotationSpeed"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      minSpawnRotationSpeedAttr.Set(desc.minSpawnRotationSpeed);
+
+      auto spawnRateAttr = particleDesc.CreateAttribute(
+      TfToken("spawnRate"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      spawnRateAttr.Set(desc.spawnRate);
+
+      auto collisionThicknessAttr = particleDesc.CreateAttribute(
+      TfToken("collisionThickness"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      collisionThicknessAttr.Set(desc.collisionThickness);
+
+      auto collisionRestitutionAttr = particleDesc.CreateAttribute(
+      TfToken("collisionRestitution"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      collisionRestitutionAttr.Set(desc.collisionRestitution);
+
+      auto initialVelocityFromMotionAttr = particleDesc.CreateAttribute(
+      TfToken("initialVelocityFromMotion"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      initialVelocityFromMotionAttr.Set(desc.initialVelocityFromMotion);
+
+      auto maxNumParticlesAttr = particleDesc.CreateAttribute(
+      TfToken("maxNumParticles"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      maxNumParticlesAttr.Set(desc.maxNumParticles);
+
+      auto billboardTypeAttr = particleDesc.CreateAttribute(
+      TfToken("billboardType"),
+      SdfValueTypeNames->UInt,
+      true
+      );
+      billboardTypeAttr.Set((uint32_t) desc.billboardType);
+
+      auto enableMotionTrailAttr = particleDesc.CreateAttribute(
+      TfToken("enableMotionTrail"),
+      SdfValueTypeNames->Bool,
+      true
+      );
+      enableMotionTrailAttr.Set(desc.enableMotionTrail);
+
+      auto useTurbulenceAttr = particleDesc.CreateAttribute(
+      TfToken("useTurbulence"),
+      SdfValueTypeNames->Bool,
+      true
+      );
+      useTurbulenceAttr.Set(desc.useTurbulence);
+
+      auto alignParticlesToVelocityAttr = particleDesc.CreateAttribute(
+      TfToken("alignParticlesToVelocity"),
+      SdfValueTypeNames->Bool,
+      true
+      );
+      alignParticlesToVelocityAttr.Set(desc.alignParticlesToVelocity);
+
+      auto useSpawnTexcoordsAttr = particleDesc.CreateAttribute(
+      TfToken("useSpawnTexcoords"),
+      SdfValueTypeNames->Bool,
+      true
+      );
+      useSpawnTexcoordsAttr.Set(desc.useSpawnTexcoords);
+
+      auto enableCollisionDetectionAttr = particleDesc.CreateAttribute(
+      TfToken("enableCollisionDetection"),
+      SdfValueTypeNames->Bool,
+      true
+      );
+      enableCollisionDetectionAttr.Set(desc.enableCollisionDetection);
+    }
+    {
+      UsdPrim particleMaterialPrim = stage->DefinePrim(SdfPath { path + "/ParticleMaterial" });
+      auto albedoPathAttr = particleMaterialPrim.CreateAttribute(
+      TfToken("albedoPath"),
+      SdfValueTypeNames->Asset,
+      true
+      );
+      albedoPathAttr.Set(SdfAssetPath(particleMaterial.m_albedoPath));
+
+      auto emissiveIntensityAttr = particleMaterialPrim.CreateAttribute(
+      TfToken("emissiveIntensity"),
+      SdfValueTypeNames->Float,
+      true
+      );
+      emissiveIntensityAttr.Set(particleMaterial.emissiveIntensity);
+    }
+  }
+
+  void RtxParticleSystemManager::load(std::string path, pxr::UsdStageRefPtr stage, RtxParticleSystemDesc& desc, ParticleSystemMaterial& particleMaterial, ParticleDataSpawnContext& spawnContext) {
+    {
+      UsdPrim particleSpawnPrim = stage->GetPrimAtPath(SdfPath { path + "/ParticleSpawnContext" });
+
+      auto emitterWorldPosAttr = particleSpawnPrim.GetAttribute(TfToken("emitterWorldPos"));
+      GfVec3f emitterWorldPos;
+      emitterWorldPosAttr.Get(&emitterWorldPos);
+      spawnContext.emitterWorldPos = Vector3(emitterWorldPos[0], emitterWorldPos[1], emitterWorldPos[2]);
+
+      auto boxDimAttr = particleSpawnPrim.GetAttribute(TfToken("boxDim"));
+      GfVec3f boxDim;
+      boxDimAttr.Get(&boxDim);
+      spawnContext.boxDim = Vector3(boxDim[0], boxDim[1], boxDim[2]);
+
+      auto spawnDirAttr = particleSpawnPrim.GetAttribute(TfToken("spawnDir"));
+      GfVec3f spawnDir;
+      spawnDirAttr.Get(&spawnDir);
+      spawnContext.spawnDir = Vector3(spawnDir[0], spawnDir[1], spawnDir[2]);
+
+      auto radiusAttr = particleSpawnPrim.GetAttribute(TfToken("radius"));
+      radiusAttr.Get(&spawnContext.radius);
+
+      auto spawnTypeAttr = particleSpawnPrim.GetAttribute(TfToken("spawnType"));
+      uint32_t spawnType;
+      spawnTypeAttr.Get(&spawnType);
+      spawnContext.spawnType = (ParticleSpawnType)spawnType;
+    }
+    {
+      UsdPrim particleDesc = stage->GetPrimAtPath(SdfPath { path + "/ParticleDescriptor" });
+
+      auto minSpawnColorAttr = particleDesc.GetAttribute(TfToken("minSpawnColor"));
+      GfVec4f minSpawnColor;
+      minSpawnColorAttr.Get(&minSpawnColor);
+      desc.minSpawnColor = Vector4(minSpawnColor[0], minSpawnColor[1], minSpawnColor[2], minSpawnColor[3]);
+
+      auto maxSpawnColorAttr = particleDesc.GetAttribute(TfToken("maxSpawnColor"));
+      GfVec4f maxSpawnColor;
+      maxSpawnColorAttr.Get(&maxSpawnColor);
+      desc.maxSpawnColor = Vector4(maxSpawnColor[0], maxSpawnColor[1], maxSpawnColor[2], maxSpawnColor[3]);
+
+      auto minTargetColorAttr = particleDesc.GetAttribute(TfToken("minTargetColor"));
+      GfVec4f minTargetColor;
+      minTargetColorAttr.Get(&minTargetColor);
+      desc.minTargetColor = Vector4(minTargetColor[0], minTargetColor[1], minTargetColor[2], minTargetColor[3]);
+
+      auto maxTargetColorAttr = particleDesc.GetAttribute(TfToken("maxTargetColor"));
+      GfVec4f maxTargetColor;
+      maxTargetColorAttr.Get(&maxTargetColor);
+      desc.maxTargetColor = Vector4(maxTargetColor[0], maxTargetColor[1], maxTargetColor[2], maxTargetColor[3]);
+
+      auto minTargetSizeAttr = particleDesc.GetAttribute(TfToken("minTargetSize"));
+      minTargetSizeAttr.Get(&desc.minTargetSize);
+
+      auto maxTargetSizeAttr = particleDesc.GetAttribute(TfToken("maxTargetSize"));
+      maxTargetSizeAttr.Get(&desc.maxTargetSize);
+
+      auto minTargetRotationSpeedAttr = particleDesc.GetAttribute(TfToken("minTargetRotationSpeed"));
+      minTargetRotationSpeedAttr.Get(&desc.minTargetRotationSpeed);
+
+      auto maxTargetRotationSpeedAttr = particleDesc.GetAttribute(TfToken("maxTargetRotationSpeed"));
+      maxTargetRotationSpeedAttr.Get(&desc.maxTargetRotationSpeed);
+
+      auto minTtlAttr = particleDesc.GetAttribute(TfToken("minTtl"));
+      minTtlAttr.Get(&desc.minTtl);
+
+      auto maxTtlAttr = particleDesc.GetAttribute(TfToken("maxTtl"));
+      maxTtlAttr.Get(&desc.maxTtl);
+
+      auto initialVelocityFromNormalAttr = particleDesc.GetAttribute(TfToken("initialVelocityFromNormal"));
+      initialVelocityFromNormalAttr.Get(&desc.initialVelocityFromNormal);
+
+      auto initialVelocityConeAngleDegreesAttr = particleDesc.GetAttribute(TfToken("initialVelocityConeAngleDegrees"));
+      initialVelocityConeAngleDegreesAttr.Get(&desc.initialVelocityConeAngleDegrees);
+
+      auto minSpawnSizeAttr = particleDesc.GetAttribute(TfToken("minSpawnSize"));
+      minSpawnSizeAttr.Get(&desc.minSpawnSize);
+
+      auto maxSpawnSizeAttr = particleDesc.GetAttribute(TfToken("maxSpawnSize"));
+      maxSpawnSizeAttr.Get(&desc.maxSpawnSize);
+
+      auto gravityForceAttr = particleDesc.GetAttribute(TfToken("gravityForce"));
+      gravityForceAttr.Get(&desc.gravityForce);
+
+      auto maxSpeedAttr = particleDesc.GetAttribute(TfToken("maxSpeed"));
+      maxSpeedAttr.Get(&desc.maxSpeed);
+
+      auto turbulenceFrequencyAttr = particleDesc.GetAttribute(TfToken("turbulenceFrequency"));
+      turbulenceFrequencyAttr.Get(&desc.turbulenceFrequency);
+
+      auto turbulenceForceAttr = particleDesc.GetAttribute(TfToken("turbulenceForce"));
+      turbulenceForceAttr.Get(&desc.turbulenceForce);
+
+      auto motionTrailMultiplierAttr = particleDesc.GetAttribute(TfToken("motionTrailMultiplier"));
+      motionTrailMultiplierAttr.Get(&desc.motionTrailMultiplier);
+
+      auto minSpawnRotationSpeedAttr = particleDesc.GetAttribute(TfToken("minSpawnRotationSpeed"));
+      minSpawnRotationSpeedAttr.Get(&desc.minSpawnRotationSpeed);
+
+      auto spawnRateAttr = particleDesc.GetAttribute(TfToken("spawnRate"));
+      spawnRateAttr.Get(&desc.spawnRate);
+
+      auto collisionThicknessAttr = particleDesc.GetAttribute(TfToken("collisionThickness"));
+      collisionThicknessAttr.Get(&desc.collisionThickness);
+
+      auto collisionRestitutionAttr = particleDesc.GetAttribute(TfToken("collisionRestitution"));
+      collisionRestitutionAttr.Get(&desc.collisionRestitution);
+
+      auto initialVelocityFromMotionAttr = particleDesc.GetAttribute(TfToken("initialVelocityFromMotion"));
+      initialVelocityFromMotionAttr.Get(&desc.initialVelocityFromMotion);
+
+      auto maxNumParticlesAttr = particleDesc.GetAttribute(TfToken("maxNumParticles"));
+      maxNumParticlesAttr.Get(&desc.maxNumParticles);
+
+      auto billboardTypeAttr = particleDesc.GetAttribute(TfToken("billboardType"));
+      uint32_t type;
+      billboardTypeAttr.Get(&type);
+      desc.billboardType = ParticleBillboardType(type);
+
+      auto enableMotionTrailAttr = particleDesc.GetAttribute(TfToken("enableMotionTrail"));
+      enableMotionTrailAttr.Get(&desc.enableMotionTrail);
+
+      auto useTurbulenceAttr = particleDesc.GetAttribute(TfToken("useTurbulence"));
+      useTurbulenceAttr.Get(&desc.useTurbulence);
+
+      auto alignParticlesToVelocityAttr = particleDesc.GetAttribute(TfToken("alignParticlesToVelocity"));
+      alignParticlesToVelocityAttr.Get(&desc.alignParticlesToVelocity);
+
+      auto useSpawnTexcoordsAttr = particleDesc.GetAttribute(TfToken("useSpawnTexcoords"));
+      useSpawnTexcoordsAttr.Get(&desc.useSpawnTexcoords);
+
+      auto enableCollisionDetectionAttr = particleDesc.GetAttribute(TfToken("enableCollisionDetection"));
+      enableCollisionDetectionAttr.Get(&desc.enableCollisionDetection);
+    }
+    {
+      UsdPrim particleMaterialPrim = stage->GetPrimAtPath(SdfPath { path + "/ParticleMaterial" });
+      auto albedoPathAttr = particleMaterialPrim.GetAttribute(TfToken("albedoPath"));
+      SdfAssetPath path;
+      albedoPathAttr.Get(&path);
+      particleMaterial.m_albedoPath = path.GetAssetPath().c_str();
+
+      auto emissiveIntensityAttr = particleMaterialPrim.GetAttribute(TfToken("emissiveIntensity"));
+      emissiveIntensityAttr.Get(&particleMaterial.emissiveIntensity);
+    }
+  }
+  // MHFZ end
 } 
